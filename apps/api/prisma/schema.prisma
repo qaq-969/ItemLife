@@ -1,0 +1,322 @@
+// ItemLife 数据模型（设计报告 5.2 的落地）
+// 约定：金额一律 BIGINT「分」；主键 UUID v7 以 BINARY(16) 存储（由应用层 newId() 生成）；时间 UTC。
+// 注意：修改本文件后执行 `pnpm --filter @itemlife/api prisma:migrate` 生成迁移。
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// 数据归属：个人 / 家庭（多态所有者）
+enum OwnerType {
+  user
+  household
+}
+
+enum TransactionType {
+  income
+  expense
+  transfer_in
+  transfer_out
+}
+
+enum AccountType {
+  cash
+  bank
+  payment
+  investment
+  receivable
+  payable
+}
+
+enum InterestFreq {
+  monthly
+  quarterly
+  yearly
+}
+
+enum CategoryKind {
+  income
+  expense
+}
+
+enum ItemStatus {
+  in_use
+  idle
+  retired
+  lost
+}
+
+enum HouseholdRole {
+  owner
+  member
+}
+
+// ---------------------------------------------------------------- 认证与用户
+
+model User {
+  id              Bytes     @id @db.Binary(16)
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  nickname        String?   @db.VarChar(50)
+  baseCurrency    String    @default("CNY") @map("base_currency") @db.Char(3)
+  mfaEnabled      Boolean   @default(false) @map("mfa_enabled")
+  totpSecretEnc   Bytes?    @map("totp_secret_enc") @db.VarBinary(512)
+  totpConfirmedAt DateTime? @map("totp_confirmed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  refreshTokens     RefreshToken[]
+  recoveryCodes     MfaRecoveryCode[]
+  memberships       HouseholdMember[]
+  ownedHouseholds   Household[]       @relation("HouseholdOwner")
+  createdInvites    HouseholdInvite[] @relation("InviteCreator")
+  createdTransactions Transaction[]   @relation("TransactionCreator")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          Bytes     @id @db.Binary(16)
+  userId      Bytes     @map("user_id") @db.Binary(16)
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  deviceName  String?   @map("device_name") @db.VarChar(100)
+  ip          String?   @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  rotatedFrom Bytes?    @map("rotated_from") @db.Binary(16)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model MfaRecoveryCode {
+  id        Bytes     @id @db.Binary(16)
+  userId    Bytes     @map("user_id") @db.Binary(16)
+  codeHash  String    @map("code_hash") @db.Char(64)
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("mfa_recovery_codes")
+}
+
+// ---------------------------------------------------------------- 家庭协作
+
+model Household {
+  id          Bytes    @id @db.Binary(16)
+  name        String   @db.VarChar(50)
+  ownerUserId Bytes    @map("owner_user_id") @db.Binary(16)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner   User              @relation("HouseholdOwner", fields: [ownerUserId], references: [id])
+  members HouseholdMember[]
+  invites HouseholdInvite[]
+
+  @@map("households")
+}
+
+model HouseholdMember {
+  id          Bytes         @id @db.Binary(16)
+  householdId Bytes         @map("household_id") @db.Binary(16)
+  userId      Bytes         @map("user_id") @db.Binary(16)
+  role        HouseholdRole @default(member)
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([userId])
+  @@map("household_members")
+}
+
+model HouseholdInvite {
+  id            Bytes     @id @db.Binary(16)
+  householdId   Bytes     @map("household_id") @db.Binary(16)
+  codeHash      String    @unique @map("code_hash") @db.Char(64)
+  expiresAt     DateTime  @map("expires_at")
+  maxUses       Int       @default(5) @map("max_uses")
+  usedCount     Int       @default(0) @map("used_count")
+  createdBy     Bytes     @map("created_by") @db.Binary(16)
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  creator   User      @relation("InviteCreator", fields: [createdBy], references: [id])
+
+  @@index([householdId])
+  @@map("household_invites")
+}
+
+// ---------------------------------------------------------------- 记账：账户 / 分类 / 流水
+
+model Account {
+  id                  Bytes         @id @db.Binary(16)
+  ownerType           OwnerType     @map("owner_type")
+  ownerId             Bytes         @map("owner_id") @db.Binary(16)
+  name                String        @db.VarChar(50)
+  type                AccountType
+  currency            String        @default("CNY") @db.Char(3)
+  initialBalanceMinor BigInt        @default(0) @map("initial_balance_minor")
+  /// 年化利率（基点，1bp = 0.01%）；NULL = 不计息（见设计报告 8.5）
+  interestRateBp      Int?          @map("interest_rate_bp")
+  interestFreq        InterestFreq? @map("interest_freq")
+  /// 上次结息日：同时作为自动结息的幂等标记
+  interestPostedAt    DateTime?     @map("interest_posted_at") @db.Date
+  sortOrder           Int           @default(0) @map("sort_order")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  deletedAt           DateTime?     @map("deleted_at")
+
+  transactions Transaction[]
+
+  @@index([ownerType, ownerId, sortOrder])
+  @@map("accounts")
+}
+
+model Category {
+  id         Bytes        @id @db.Binary(16)
+  ownerType  OwnerType    @map("owner_type")
+  ownerId    Bytes        @map("owner_id") @db.Binary(16)
+  kind       CategoryKind
+  name       String       @db.VarChar(30)
+  icon       String?      @db.VarChar(50)
+  color      String?      @db.Char(7)
+  parentId   Bytes?       @map("parent_id") @db.Binary(16)
+  sortOrder  Int          @default(0) @map("sort_order")
+  /// 系统标签：investment_return（投资收益）/ interest（自动结息），驱动看板口径
+  systemTag  String?      @map("system_tag") @db.VarChar(30)
+  isSystem   Boolean      @default(false) @map("is_system")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  deletedAt  DateTime?    @map("deleted_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  transactions Transaction[]
+
+  @@index([ownerType, ownerId, kind, sortOrder])
+  @@map("categories")
+}
+
+model Transaction {
+  id              Bytes           @id @db.Binary(16)
+  ownerType       OwnerType       @map("owner_type")
+  ownerId         Bytes           @map("owner_id") @db.Binary(16)
+  type            TransactionType
+  /// 金额（分）；支出 / 转出为负向语义由 type 表达，此处始终存正数
+  amountMinor     BigInt          @map("amount_minor")
+  currency        String          @default("CNY") @db.Char(3)
+  accountId       Bytes           @map("account_id") @db.Binary(16)
+  categoryId      Bytes?          @map("category_id") @db.Binary(16)
+  occurredAt      DateTime        @map("occurred_at")
+  note            String?         @db.VarChar(200)
+  systemTag       String?         @map("system_tag") @db.VarChar(30)
+  /// 转账成对写入时共享同一 group id
+  transferGroupId Bytes?          @map("transfer_group_id") @db.Binary(16)
+  createdBy       Bytes           @map("created_by") @db.Binary(16)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  account   Account           @relation(fields: [accountId], references: [id])
+  category  Category?         @relation(fields: [categoryId], references: [id])
+  creator   User              @relation("TransactionCreator", fields: [createdBy], references: [id])
+  // 物品关联统一走分摊表（一笔流水可关联 1～N 个物品）
+  itemLinks TransactionItem[]
+
+  @@index([ownerType, ownerId, occurredAt])
+  @@index([accountId, type, amountMinor])
+  @@index([categoryId, occurredAt])
+  @@index([transferGroupId])
+  @@map("transactions")
+}
+
+/// 流水-物品分摊：amount_minor 为 NULL 表示继承整笔流水金额（仅单物品场景允许）
+model TransactionItem {
+  id            Bytes    @id @db.Binary(16)
+  transactionId Bytes    @map("transaction_id") @db.Binary(16)
+  itemId        Bytes    @map("item_id") @db.Binary(16)
+  amountMinor   BigInt?  @map("amount_minor")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  item        Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, itemId])
+  @@index([itemId, createdAt])
+  @@map("transaction_items")
+}
+
+// ---------------------------------------------------------------- 物品与配件
+
+model Item {
+  id                   Bytes      @id @db.Binary(16)
+  ownerType            OwnerType  @map("owner_type")
+  ownerId              Bytes      @map("owner_id") @db.Binary(16)
+  name                 String     @db.VarChar(100)
+  categoryId           Bytes?     @map("category_id") @db.Binary(16)
+  purchaseDate         DateTime   @map("purchase_date") @db.Date
+  /// 本体价（分）；若由流水创建，默认取该流水的分摊金额
+  purchasePriceMinor   BigInt     @map("purchase_price_minor")
+  currency             String     @default("CNY") @db.Char(3)
+  expectedLifespanDays Int?       @map("expected_lifespan_days")
+  status               ItemStatus @default(in_use)
+  note                 String?    @db.VarChar(200)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  accessories     ItemAccessory[]
+  transactionLinks TransactionItem[]
+
+  @@index([ownerType, ownerId, status])
+  @@index([categoryId])
+  @@map("items")
+}
+
+model ItemAccessory {
+  id             Bytes    @id @db.Binary(16)
+  itemId         Bytes    @map("item_id") @db.Binary(16)
+  name           String   @db.VarChar(50)
+  unitPriceMinor BigInt   @map("unit_price_minor")
+  totalQty       Int      @map("total_qty")
+  usedQty        Int      @default(0) @map("used_qty")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("item_accessories")
+}
+
+// ---------------------------------------------------------------- 货币扩展预留
+
+/// v1.0 仅 CNY（CurrencyService 恒等转换）；本表为多币种启用时提供汇率来源
+model ExchangeRate {
+  id            Bytes    @id @db.Binary(16)
+  fromCurrency  String   @map("from_currency") @db.Char(3)
+  toCurrency    String   @map("to_currency") @db.Char(3)
+  rate          Decimal  @db.Decimal(18, 8)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  source        String?  @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([fromCurrency, toCurrency, effectiveDate])
+  @@map("exchange_rates")
+}

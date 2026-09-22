@@ -1,0 +1,43 @@
+# 开发叠加文件：docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# 作用：源码热重载 + 暴露 api / mysql / redis 端口便于本机调试（Swagger 在 http://localhost:3000/api/docs）
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    image: itemlife/web:dev
+    command: ['pnpm', '--filter', '@itemlife/web', 'dev', '--host', '0.0.0.0', '--port', '80']
+    environment:
+      # Vite Dev Server 把 /api 转发到容器网络内的 api 服务
+      VITE_DEV_API_TARGET: http://api:3000
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/index.html:/repo/apps/web/index.html
+      - ./apps/web/vite.config.ts:/repo/apps/web/vite.config.ts
+      - ./packages/shared/src:/repo/packages/shared/src
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    image: itemlife/api:dev
+    command: ['pnpm', '--filter', '@itemlife/api', 'start:dev']
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: mysql://${MYSQL_USER:-itemlife}:${DB_PASSWORD}@mysql:3306/${MYSQL_DATABASE:-itemlife}
+    ports:
+      - '${API_PORT:-3000}:3000'
+    volumes:
+      - ./apps/api/src:/repo/apps/api/src
+      - ./apps/api/prisma:/repo/apps/api/prisma
+      - ./packages/shared/src:/repo/packages/shared/src
+
+  mysql:
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+
+  redis:
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
