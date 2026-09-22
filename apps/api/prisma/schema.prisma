@@ -66,8 +66,10 @@ model User {
   nickname        String?   @db.VarChar(50)
   baseCurrency    String    @default("CNY") @map("base_currency") @db.Char(3)
   mfaEnabled      Boolean   @default(false) @map("mfa_enabled")
-  totpSecretEnc   Bytes?    @map("totp_secret_enc") @db.VarBinary(512)
+  totpSecretEnc   Bytes?    @map("totp_secret_enc") @db.VarBinary(255)
   totpConfirmedAt DateTime? @map("totp_confirmed_at")
+  /// 最后成功验证的 TOTP 时间步：同一窗口内的动态码二次提交一律拒绝（防重放，见设计报告 7.3）
+  lastTotpStep    BigInt?   @map("last_totp_step")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
