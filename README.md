@@ -3,6 +3,7 @@
 以**物品为视角**的个人 / 家庭记账 Web 应用：既做常规收支记账与资产余额管理，又把支出与具体物品（及其配件）关联，回答「一件东西从买到用完，总共花了多少钱、每天成本是多少」。
 
 - **设计报告（先读这份）**：[`docs/design-report.html`](docs/design-report.html)
+- **目录结构说明（动手改代码前看）**：[`docs/project-structure.md`](docs/project-structure.md)
 - **已确认决策**：成本三核心指标（总支付 / 当前持有成本 / 日均持有成本）、一笔流水多物品分摊、账户利息自动计算、内网部署 + 外部反向代理、仅 CNY（预留汇率扩展）
 
 ## 技术栈
@@ -23,7 +24,7 @@ itemlife/
 │   └── api/            # 后端 NestJS（Prisma；启动时自动执行迁移）
 ├── packages/
 │   └── shared/         # 前后端共享：金额工具、常量、DTO 类型
-├── docs/               # 设计报告
+├── docs/               # 设计报告 + 目录结构说明
 ├── scripts/            # gen-secrets.sh / backup.sh
 ├── docker-compose.yml      # 生产编排
 └── docker-compose.dev.yml  # 开发叠加（热重载）
@@ -49,6 +50,12 @@ pnpm --filter @itemlife/api prisma:migrate   # 首次：建表
 pnpm --filter @itemlife/api prisma:seed      # 首次：写入预置分类
 pnpm dev:api                       # 终端 1：NestJS（http://localhost:3000，Swagger /api/docs）
 pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/api 代理到 3000）
+```
+
+不依赖 MySQL / Redis 也能验证认证链路（内存替身 + 真实 HTTP 全链路断言）：
+
+```bash
+pnpm --filter @itemlife/api smoke:auth
 ```
 
 也可以在容器里开发（源码挂载 + 热重载，前后端一致的容器环境）：
