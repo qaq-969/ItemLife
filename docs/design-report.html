@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ItemLife · 系统设计报告 v1.0</title>
+<style>
+  :root{
+    --c-bg:#f6f7f9; --c-card:#ffffff; --c-text:#1f2937; --c-text-2:#4b5563; --c-text-3:#6b7280;
+    --c-border:#e5e7eb; --c-border-2:#d1d5db;
+    --c-primary:#4f46e5; --c-primary-bg:#eef2ff; --c-primary-dk:#3730a3;
+    --c-green:#059669; --c-green-bg:#ecfdf5;
+    --c-amber:#b45309; --c-amber-bg:#fffbeb;
+    --c-red:#dc2626; --c-red-bg:#fef2f2;
+    --c-violet:#7c3aed; --c-violet-bg:#f5f3ff;
+    --c-cyan:#0891b2; --c-cyan-bg:#ecfeff;
+    --radius:10px; --radius-s:6px;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--c-bg); color:var(--c-text); font-size:15px; line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* ---------- 封面 ---------- */
+  .cover{
+    background:linear-gradient(135deg,#312e81 0%,#4f46e5 55%,#7c3aed 100%);
+    color:#fff; padding:64px 24px 56px; position:relative; overflow:hidden;
+  }
+  .cover::after{
+    content:""; position:absolute; right:-120px; top:-120px; width:420px; height:420px;
+    border-radius:50%; background:rgba(255,255,255,.07);
+  }
+  .cover::before{
+    content:""; position:absolute; left:-80px; bottom:-160px; width:320px; height:320px;
+    border-radius:50%; background:rgba(255,255,255,.05);
+  }
+  .cover-inner{max-width:960px;margin:0 auto;position:relative;z-index:1}
+  .cover .badge{
+    display:inline-block;font-size:12.5px;letter-spacing:.06em;padding:4px 12px;border-radius:999px;
+    background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);margin-bottom:18px;
+  }
+  .cover h1{font-size:clamp(26px,4.5vw,40px);font-weight:700;letter-spacing:.01em;line-height:1.3}
+  .cover .sub{margin-top:12px;font-size:clamp(14px,2vw,17px);color:rgba(255,255,255,.85)}
+  .cover .meta{
+    margin-top:28px;display:flex;flex-wrap:wrap;gap:10px 28px;font-size:13.5px;color:rgba(255,255,255,.9);
+  }
+  .cover .meta b{font-weight:600;color:#fff}
+  /* ---------- 布局 ---------- */
+  .layout{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:250px minmax(0,1fr);gap:36px;padding:36px 24px 80px}
+  main{min-width:0}
+  /* ---------- 目录 ---------- */
+  .toc-wrap{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto}
+  .toc{background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);padding:16px 10px;box-shadow:var(--shadow)}
+  .toc h3{font-size:12px;letter-spacing:.1em;color:var(--c-text-3);text-transform:uppercase;padding:0 10px 10px;border-bottom:1px solid var(--c-border);margin-bottom:8px}
+  .toc a{
+    display:block;font-size:13.5px;color:var(--c-text-2);text-decoration:none;
+    padding:6px 10px;border-radius:var(--radius-s);border-left:2px solid transparent;transition:.15s;
+  }
+  .toc a:hover{background:var(--c-bg);color:var(--c-text)}
+  .toc a.active{background:var(--c-primary-bg);color:var(--c-primary-dk);border-left-color:var(--c-primary);font-weight:600}
+  .toc-toggle{display:none}
+  /* ---------- 卡片与章节 ---------- */
+  section{background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);padding:28px 30px;margin-bottom:26px;box-shadow:var(--shadow)}
+  section > h2{
+    font-size:21px;font-weight:700;color:var(--c-text);padding-bottom:12px;margin-bottom:20px;
+    border-bottom:2px solid var(--c-primary-bg);display:flex;align-items:baseline;gap:10px;
+  }
+  section > h2 .no{
+    font-size:13px;font-weight:700;color:#fff;background:var(--c-primary);
+    border-radius:6px;padding:2px 9px;flex:none;transform:translateY(-2px);
+  }
+  h3{font-size:16.5px;font-weight:700;margin:26px 0 10px;color:var(--c-text)}
+  h4{font-size:14.5px;font-weight:700;margin:18px 0 8px;color:var(--c-text-2)}
+  p{margin:8px 0;color:var(--c-text-2)}
+  ul,ol{margin:8px 0 8px 22px;color:var(--c-text-2)}
+  li{margin:4px 0}
+  strong{color:var(--c-text)}
+  code{font-family:var(--mono);font-size:12.8px;background:#f1f5f9;border:1px solid var(--c-border);border-radius:4px;padding:1px 5px;color:#334155}
+  /* ---------- 表格 ---------- */
+  .tbl-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--c-border);border-radius:var(--radius-s)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+  th{background:#f8fafc;text-align:left;font-weight:700;color:var(--c-text);padding:9px 12px;border-bottom:1px solid var(--c-border-2);white-space:nowrap}
+  td{padding:8px 12px;border-bottom:1px solid var(--c-border);color:var(--c-text-2);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#fafbfc}
+  td code{white-space:nowrap}
+  /* ---------- 标签 ---------- */
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:1.5px 8px;border-radius:999px;line-height:1.6;white-space:nowrap}
+  .tag-rec{background:var(--c-green-bg);color:var(--c-green);border:1px solid #a7f3d0}
+  .tag-alt{background:#f1f5f9;color:#475569;border:1px solid var(--c-border-2)}
+  .tag-risk{background:var(--c-red-bg);color:var(--c-red);border:1px solid #fecaca}
+  .tag-q{background:var(--c-amber-bg);color:var(--c-amber);border:1px solid #fde68a}
+  .tag-info{background:var(--c-cyan-bg);color:var(--c-cyan);border:1px solid #a5f3fc}
+  .tag-owner{background:var(--c-violet-bg);color:var(--c-violet);border:1px solid #ddd6fe}
+  /* ---------- 提示框 ---------- */
+  .box{border-radius:var(--radius-s);padding:13px 16px;margin:14px 0;font-size:13.8px;border:1px solid}
+  .box p{margin:4px 0}
+  .box-info{background:#f0f9ff;border-color:#bae6fd;color:#0c4a6e}
+  .box-warn{background:var(--c-amber-bg);border-color:#fde68a;color:#78350f}
+  .box-danger{background:var(--c-red-bg);border-color:#fecaca;color:#7f1d1d}
+  .box-ok{background:var(--c-green-bg);border-color:#a7f3d0;color:#064e3b}
+  .box b{color:inherit}
+  /* ---------- 公式 ---------- */
+  .formula{
+    font-family:var(--mono);font-size:13.5px;background:#0f172a;color:#e2e8f0;
+    border-radius:var(--radius-s);padding:14px 18px;margin:12px 0;overflow-x:auto;line-height:2;
+  }
+  .formula .hl{color:#7dd3fc}
+  .formula .cm{color:#64748b}
+  /* ---------- 代码块 ---------- */
+  pre.code{
+    font-family:var(--mono);font-size:12.6px;line-height:1.7;background:#0f172a;color:#e2e8f0;
+    border-radius:var(--radius-s);padding:16px 18px;overflow-x:auto;margin:12px 0;
+  }
+  pre.code .c{color:#64748b}
+  pre.code .k{color:#c084fc}
+  pre.code .s{color:#7dd3fc}
+  pre.code .f{color:#fbbf24}
+  /* ---------- 卡片网格 ---------- */
+  .grid{display:grid;gap:14px;margin:14px 0}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .cell{border:1px solid var(--c-border);border-radius:var(--radius-s);padding:14px 16px;background:#fcfcfd}
+  .cell h5{font-size:13.5px;font-weight:700;color:var(--c-text);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .cell p{font-size:13px;margin:3px 0}
+  .cell .num{font-size:11px;font-weight:700;color:#fff;border-radius:5px;padding:1px 7px;flex:none}
+  .kpi{text-align:center;padding:16px 10px}
+  .kpi .v{font-size:22px;font-weight:800;color:var(--c-primary-dk);letter-spacing:-.01em}
+  .kpi .l{font-size:12px;color:var(--c-text-3);margin-top:2px}
+  /* ---------- 图表容器 ---------- */
+  .fig{margin:18px 0;border:1px solid var(--c-border);border-radius:var(--radius-s);background:#fcfcfd;padding:18px}
+  .fig .cap{font-size:12.5px;color:var(--c-text-3);text-align:center;margin-top:10px}
+  .fig svg{width:100%;height:auto;display:block}
+  /* ---------- 线框图 ---------- */
+  .wf{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+  .wf-phone{width:230px;border:2px solid var(--c-border-2);border-radius:22px;background:#fff;overflow:hidden;box-shadow:var(--shadow);flex:none}
+  .wf-phone .ph-top{height:26px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--c-text-3);border-bottom:1px solid var(--c-border)}
+  .wf-phone .ph-body{padding:10px;display:flex;flex-direction:column;gap:8px;min-height:330px}
+  .wf-phone .ph-tab{height:44px;border-top:1px solid var(--c-border);display:flex;background:#fafafa}
+  .wf-phone .ph-tab span{flex:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--c-text-3)}
+  .wf-phone .ph-tab span.on{color:var(--c-primary);font-weight:700;box-shadow:inset 0 2px 0 var(--c-primary)}
+  .wf-desk{width:560px;max-width:100%;border:2px solid var(--c-border-2);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--shadow)}
+  .wf-desk .dk-top{height:30px;background:#f1f5f9;border-bottom:1px solid var(--c-border);display:flex;align-items:center;padding:0 10px;gap:5px}
+  .wf-desk .dk-top i{width:9px;height:9px;border-radius:50%;background:#e2e8f0;display:block}
+  .wf-desk .dk-body{display:grid;grid-template-columns:110px 1fr;min-height:300px}
+  .wf-desk .dk-side{background:#fafafa;border-right:1px solid var(--c-border);padding:10px 8px;display:flex;flex-direction:column;gap:6px}
+  .wf-desk .dk-side span{font-size:10.5px;color:var(--c-text-3);padding:5px 8px;border-radius:5px}
+  .wf-desk .dk-side span.on{background:var(--c-primary-bg);color:var(--c-primary-dk);font-weight:700}
+  .wf-desk .dk-main{padding:12px;display:flex;flex-direction:column;gap:9px}
+  .wf-row{display:grid;gap:8px}
+  .blk{background:#f1f5f9;border:1px dashed var(--c-border-2);border-radius:6px;font-size:11px;color:var(--c-text-3);display:flex;align-items:center;justify-content:center;padding:8px 6px;text-align:center}
+  .blk-p{background:var(--c-primary-bg);border:1px solid #c7d2fe;color:var(--c-primary-dk);font-weight:600}
+  .blk-g{background:var(--c-green-bg);border:1px solid #a7f3d0;color:#065f46}
+  .blk-o{background:var(--c-amber-bg);border:1px solid #fde68a;color:#92400e}
+  .tall{min-height:72px}
+  /* ---------- 断点条 ---------- */
+  .bp-bar{display:flex;border-radius:var(--radius-s);overflow:hidden;border:1px solid var(--c-border);margin:12px 0;font-size:12px;text-align:center}
+  .bp-bar div{padding:9px 6px;border-right:1px solid var(--c-border);background:#f8fafc;color:var(--c-text-2)}
+  .bp-bar div:last-child{border-right:none}
+  .bp-bar b{display:block;font-size:12.5px;color:var(--c-text)}
+  /* ---------- 页脚 ---------- */
+  footer{max-width:1240px;margin:0 auto;padding:0 24px 60px;color:var(--c-text-3);font-size:12.5px}
+  footer .links a{color:var(--c-primary);text-decoration:none;display:block;margin:3px 0;word-break:break-all}
+  footer .links a:hover{text-decoration:underline}
+  /* ---------- 响应式 ---------- */
+  @media (max-width:1023px){
+    .layout{grid-template-columns:1fr;gap:0;padding:20px 14px 60px}
+    .toc-wrap{position:static;max-height:none;margin-bottom:18px}
+    .toc{display:none}
+    .toc.open{display:block}
+    .toc-toggle{
+      display:flex;align-items:center;justify-content:space-between;width:100%;
+      background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);
+      padding:13px 16px;font-size:14.5px;font-weight:700;color:var(--c-text);cursor:pointer;box-shadow:var(--shadow);
+    }
+    .toc-toggle .arr{transition:.2s}
+    .toc-toggle.open .arr{transform:rotate(180deg)}
+    section{padding:22px 18px}
+    .g4{grid-template-columns:repeat(2,1fr)}
+    .g3{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:639px){
+    body{font-size:14.3px}
+    .cover{padding:44px 18px 40px}
+    .g2,.g3,.g4{grid-template-columns:1fr}
+    section{padding:18px 14px}
+    section > h2{font-size:18.5px}
+    .wf-desk{width:100%}
+  }
+  @media print{
+    .toc-wrap,.toc-toggle{display:none!important}
+    .layout{display:block;max-width:100%}
+    section{break-inside:avoid-page;box-shadow:none}
+    .cover{background:#312e81!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+  /* 返回顶部 */
+  #top-btn{
+    position:fixed;right:22px;bottom:26px;width:42px;height:42px;border-radius:50%;
+    background:var(--c-primary);color:#fff;border:none;cursor:pointer;font-size:17px;
+    box-shadow:0 4px 14px rgba(79,70,229,.4);opacity:0;pointer-events:none;transition:.25s;z-index:50;
+  }
+  #top-btn.show{opacity:1;pointer-events:auto}
+</style>
+</head>
+<body>
+
+<!-- ======================= 封面 ======================= -->
+<header class="cover">
+  <div class="cover-inner">
+    <span class="badge">SYSTEM DESIGN REPORT · 待评审</span>
+    <h1>ItemLife · 物品化家庭记账平台<br>系统设计报告</h1>
+    <p class="sub">前后端分离 · 容器化部署 · 面向手机 / 平板 / 桌面全尺寸设备的响应式 Web 应用</p>
+    <div class="meta">
+      <span>版本：<b>v1.0</b></span>
+      <span>日期：<b>2026-09-18</b></span>
+      <span>状态：<b>待评审</b></span>
+      <span>技术栈：<b>Vue 3 + NestJS + MySQL 8</b></span>
+      <span>部署：<b>Docker Compose</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ======================= 目录 ======================= -->
+  <aside class="toc-wrap">
+    <button class="toc-toggle" id="tocToggle" aria-expanded="false" aria-controls="toc">
+      <span>目录 · 13 个章节</span><span class="arr">▾</span>
+    </button>
+    <nav class="toc" id="toc">
+      <h3>报告目录</h3>
+      <a href="#s1">1. 项目概述</a>
+      <a href="#s2">2. 需求分析</a>
+      <a href="#s3">3. 技术选型与论证</a>
+      <a href="#s4">4. 系统架构设计</a>
+      <a href="#s5">5. 数据模型设计</a>
+      <a href="#s6">6. API 接口设计</a>
+      <a href="#s7">7. 安全设计（MFA / 加密）</a>
+      <a href="#s8">8. 核心业务逻辑设计</a>
+      <a href="#s9">9. UI/UX 与响应式设计</a>
+      <a href="#s10">10. Docker 容器化部署</a>
+      <a href="#s11">11. 工程目录结构</a>
+      <a href="#s12">12. 开发里程碑</a>
+      <a href="#s13">13. 风险与决策记录</a>
+    </nav>
+  </aside>
+
+  <main>
+
+  <!-- ======================= 1. 项目概述 ======================= -->
+  <section id="s1">
+    <h2><span class="no">01</span>项目概述</h2>
+
+    <h3>1.1 一句话定位</h3>
+    <p><strong>ItemLife 是一个「以物品为视角」的个人 / 家庭记账 Web 应用</strong>：既做常规的收支记账与资产余额管理，又把每一笔支出与具体物品（及其配件）关联起来，让用户看清「一件东西从买到用完，总共花了多少钱、每天成本是多少」。</p>
+
+    <h3>1.2 核心价值</h3>
+    <div class="grid g3">
+      <div class="cell">
+        <h5><span class="num" style="background:var(--c-primary)">记</span>记账</h5>
+        <p>账户资产余额管理、自定义分类、收入 / 支出 / 转账、消费与储蓄趋势看板。</p>
+      </div>
+      <div class="cell">
+        <h5><span class="num" style="background:var(--c-green)">物</span>物品</h5>
+        <p>支出与物品关联，配件库存（如 12 个刷头用了 2 个）与持有成本核算，独立的物品看板。</p>
+      </div>
+      <div class="cell">
+        <h5><span class="num" style="background:var(--c-violet)">家</span>家庭</h5>
+        <p>邀请码组建家庭，数据域（个人 / 家庭）自由切换，家庭共享账本与物品库。</p>
+      </div>
+    </div>
+
+    <h3>1.3 关键设计原则</h3>
+    <ul>
+      <li><strong>移动优先（Mobile First）</strong>——先在 360px 宽度上把体验做对，再向上适配平板与桌面，而不是把桌面版缩小。</li>
+      <li><strong>单一数据源（Single Source of Truth）</strong>——流水表 <code>transactions</code> 是金额的唯一权威来源；账户余额、物品成本、看板统计均由它派生，避免多份数据对不上。</li>
+      <li><strong>凭据绝不明文</strong>——密码、TOTP 密钥、恢复码、刷新令牌全部经过哈希或加密后才落库（详见第 7 章）。</li>
+      <li><strong>安全默认（Secure by Default）</strong>——注册即引导开启 MFA；接口默认要求鉴权；越权校验内置在数据访问层。</li>
+      <li><strong>一键部署</strong>——目标机器只需安装 Docker，执行 <code>docker compose up -d</code> 即可完成全部服务的构建、初始化与启动。</li>
+    </ul>
+
+    <h3>1.4 范围界定</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>范围内（v1.0 交付）</th><th>范围外（后续版本候选）</th></tr></thead>
+        <tbody>
+          <tr><td>邮箱注册登录、TOTP 两步验证、恢复码</td><td>第三方登录（微信 / GitHub OAuth）</td></tr>
+          <tr><td>账户 / 分类 / 收支转账记账、资产余额、账户利息自动计算</td><td>银行账单自动导入、多币种界面与实时汇率（v1.0 仅 CNY，数据模型与转换接口已预留，见 5.4）</td></tr>
+          <tr><td>物品-支出关联、配件库存、成本看板</td><td>物品图片 OCR 识别、保修到期提醒推送</td></tr>
+          <tr><td>邀请码家庭、个人 / 家庭数据域切换</td><td>家庭预算、审批流、成员权限细分</td></tr>
+          <tr><td>消费 / 储蓄 / 收益趋势看板（收益含自动结息利息）</td><td>原生 App（iOS / Android）、桌面客户端</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= 2. 需求分析 ======================= -->
+  <section id="s2">
+    <h2><span class="no">02</span>需求分析</h2>
+
+    <h3>2.1 功能需求（FR）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:70px">编号</th><th style="width:150px">模块</th><th>需求描述</th><th style="width:90px">优先级</th></tr></thead>
+        <tbody>
+          <tr><td>FR-01</td><td>账户与安全</td><td>邮箱 + 密码注册；密码强度校验；Argon2id 哈希存储</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-02</td><td>账户与安全</td><td>登录 + TOTP 两步验证（Google Authenticator 兼容）；10 个一次性恢复码</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-03</td><td>账户与安全</td><td>会话管理：刷新令牌旋转、记住设备、主动登出全部设备</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-04</td><td>记账</td><td>记一笔：支出 / 收入 / 转账；金额、时间、账户、分类、备注</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-05</td><td>记账</td><td>设置菜单：用户自定义分类（名称、图标、颜色、排序、增删改）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-06</td><td>记账</td><td>资产账户管理：现金 / 银行 / 支付平台 / 投资等账户，余额自动汇总，净资产视图</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-07</td><td>记账</td><td>流水列表：按时间倒序、筛选（时间 / 分类 / 账户 / 数据域）、编辑、删除</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-08</td><td>物品</td><td>物品档案：名称、购买日期、价格、预期寿命、状态（在用 / 闲置 / 退役 / 丢失）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-09</td><td>物品</td><td>配件管理：为物品添加配件（单价、总数、已用数），支持「使用一个 / 撤销」</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-10</td><td>物品</td><td>成本多视角展示：总支付金额、当前持有成本、日均持有成本（核心三指标）+ 剩余配件价值；详情页必须完整展示全部指标</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-11</td><td>物品</td><td>记账时可关联 1～N 个物品并逐个指定分摊金额；单物品省略金额时继承流水全额（购买物品 / 配件 / 维修等）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-12</td><td>物品</td><td>「物品」看板：物品总览、总投入、按类别统计、高成本物品排行</td><td><span class="tag tag-rec">P1</span></td></tr>
+          <tr><td>FR-13</td><td>家庭</td><td>创建家庭、生成邀请码（有效期 + 使用次数限制）、凭码加入、退出 / 移除成员</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-14</td><td>家庭</td><td>添加记账 / 物品时选择归属：个人 或 某个家庭；列表按数据域筛选</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-15</td><td>看板</td><td>趋势看板：消费金额、储蓄额度、收益（含自动结息利息）趋势；时间粒度（日 / 周 / 月）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-16</td><td>看板</td><td>分类占比、账户余额分布、收支对比、同环比</td><td><span class="tag tag-rec">P1</span></td></tr>
+          <tr><td>FR-17</td><td>记账</td><td>账户利息自动计算：账户可配置年化利率与结息周期，按日计息、周期入账（幂等防重），支持手动结息</td><td><span class="tag tag-rec">P1</span></td></tr>
+          <tr><td>FR-18</td><td>设置</td><td>个人资料、修改密码（需二次验证）、MFA 开启 / 重绑 / 关闭、恢复码重置</td><td><span class="tag tag-rec">P0</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13px;color:var(--c-text-3)">P0 = v1.0 必须交付；P1 = v1.0 尽量交付，可顺延至 v1.1。</p>
+
+    <h3>2.2 非功能需求（NFR）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:70px">编号</th><th style="width:130px">类别</th><th>指标与验收标准</th></tr></thead>
+        <tbody>
+          <tr><td>NFR-01</td><td>多端响应式</td><td>360px–2560px 宽度区间内布局正确、无横向滚动；手机 / 平板 / 桌面三档布局；Chrome / Edge 最新两个大版本流畅运行（≥55 FPS 滚动）</td></tr>
+          <tr><td>NFR-02</td><td>性能</td><td>4G 网络下首屏可交互 &lt; 3s；记账保存操作反馈 &lt; 500ms；首屏 JS（gzip）预算 ≤ 200KB（图表库按需懒加载）</td></tr>
+          <tr><td>NFR-03</td><td>安全</td><td>凭据类数据零明文落库；全站 HTTPS；OWASP Top 10 防护；MFA 覆盖所有账号</td></tr>
+          <tr><td>NFR-04</td><td>数据完整性</td><td>金额一律精确到分、无浮点误差；转账操作原子提交；删除为软删除可恢复</td></tr>
+          <tr><td>NFR-05</td><td>可部署性</td><td>单机 Docker Compose 一键启动；含数据库初始化与迁移；提供健康检查与备份脚本</td></tr>
+          <tr><td>NFR-06</td><td>可维护性</td><td>前后端 TypeScript 全栈；接口有 OpenAPI 文档；核心逻辑有单元测试（覆盖 ≥ 70%）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>2.3 典型用户故事</h3>
+    <ul>
+      <li>「我买了一把电动牙刷（400 元）和 12 个替换刷头（单价 20 元）。我想看到：<em>总共付了 640 元</em>，而按现在用了 2 个刷头算，<em>这只牙刷（含已耗材）折算到持有期里每天花了我多少钱</em>。」→ FR-09 / FR-10</li>
+      <li>「我和家人共用一个家庭账本记录水电物业，但我自己的数码开销想单独记。」→ FR-13 / FR-14 数据域切换</li>
+      <li>「我想知道这个月比上个月多花了多少，钱主要花在哪一类。」→ FR-15 / FR-16</li>
+      <li>「我的账号里有全部家庭财务数据，必须防止被盗。」→ FR-02 / FR-03 / FR-17</li>
+    </ul>
+  </section>
+
+  <!-- ======================= 3. 技术选型 ======================= -->
+  <section id="s3">
+    <h2><span class="no">03</span>技术选型与论证</h2>
+
+    <p>选型总原则：<strong>全栈 TypeScript 共享类型、移动端优先、容器友好、单人可维护</strong>。数据库按需求方指定采用 MySQL 8。</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:110px">层次</th><th style="width:230px">选型</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>前端框架</td>
+            <td><strong>Vue 3</strong>（Composition API）+ TypeScript + Vite <span class="tag tag-rec">推荐</span></td>
+            <td>响应式系统对「账本数据频繁联动刷新」场景心智负担低；SFC 单文件组件适合单人快速迭代；Vite 构建快、产物体积小；中文社区资料充足。</td>
+          </tr>
+          <tr>
+            <td>UI / 样式</td>
+            <td><strong>Tailwind CSS</strong> + Radix Vue（无头组件）<span class="tag tag-rec">推荐</span></td>
+            <td>断点前缀（<code>sm: md: lg:</code>）天然适合移动优先的响应式改造；不绑定某套桌面或移动组件库，避免「桌面组件库在手机上水土不服」。复杂交互（弹层 / 抽屉 / 日期选择）用无头组件保证可访问性。</td>
+          </tr>
+          <tr>
+            <td>状态 / 数据</td>
+            <td>Pinia + TanStack Query (Vue Query)</td>
+            <td>Pinia 管会话与 UI 状态；Query 管服务端数据缓存、失效重取、乐观更新（记账后看板自动刷新）。</td>
+          </tr>
+          <tr>
+            <td>图表</td>
+            <td><strong>ECharts</strong>（按需引入）</td>
+            <td>移动端触摸交互成熟、大数据量性能好、中文文档完善；按需注册组件控制包体积。</td>
+          </tr>
+          <tr>
+            <td>后端框架</td>
+            <td><strong>NestJS</strong>（Node.js LTS + TS）<span class="tag tag-rec">推荐</span></td>
+            <td>模块化架构（Auth / Ledger / Item / Family / Dashboard 清晰分层）；与前端共享 DTO 类型定义；Passport 生态覆盖 JWT 认证；内置 Guards / Interceptors / Pipes 体系，安全校验有规范落点；容器镜像轻量（约 150MB）。</td>
+          </tr>
+          <tr>
+            <td>ORM / 迁移</td>
+            <td><strong>Prisma</strong> + MySQL 8.4</td>
+            <td>Schema 即文档、类型安全查询（编译期发现字段错误）、迁移工具 <code>prisma migrate</code> 适合容器化启动流程；参数化查询天然防 SQL 注入。</td>
+          </tr>
+          <tr>
+            <td>认证与 MFA</td>
+            <td>Passport-JWT + <strong>otplib</strong>（TOTP，RFC 6238）+ <code>argon2</code> + <code>qrcode</code></td>
+            <td>otplib 是 Node 生态 TOTP 事实标准，兼容 Google Authenticator / 微软 Authenticator；argon2 为 OWASP 首推密码哈希算法。</td>
+          </tr>
+          <tr>
+            <td>缓存 / 限流</td>
+            <td>Redis 7 + <code>@nestjs/throttler</code></td>
+            <td>登录限流、TOTP 防重放时间窗、刷新令牌吊销名单、看板聚合结果短缓存。</td>
+          </tr>
+          <tr>
+            <td>Web 服务器</td>
+            <td>Nginx（alpine）</td>
+            <td>托管前端静态产物 + 反向代理 <code>/api</code>；gzip、缓存头、SPA 路由回退一站配置。</td>
+          </tr>
+          <tr>
+            <td>容器编排</td>
+            <td><strong>Docker Compose</strong></td>
+            <td>需求明确要求；单机自托管场景最合适的复杂度；healthcheck + depends_on 保证启动顺序。</td>
+          </tr>
+          <tr>
+            <td>测试</td>
+            <td>Vitest（单测）+ Playwright（E2E，多视口）</td>
+            <td>Playwright 可直接在 375 / 768 / 1440 三种视口跑同一套用例，验证响应式行为。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box box-info">
+      <p><b>关于数据库：</b>按需求方指定采用 <strong>MySQL 8.4 LTS</strong>（InnoDB + utf8mb4），金额使用 <code>BIGINT</code> 存储「分」而非浮点；MySQL 8 的窗口函数与 CTE 足以支撑看板聚合查询。</p>
+    </div>
+
+    <h3>3.1 为什么金额存「整数分」</h3>
+    <p>浮点（FLOAT / DOUBLE）存在二进制表示误差（<code>0.1 + 0.2 ≠ 0.3</code>），记账系统绝不可用；<code>DECIMAL</code> 虽然精确，但在 ORM 与 JS 之间转换时需要额外的小数处理库。<strong>统一以「分」为单位的 BIGINT 存储与传输</strong>，在前端展示层再除以 100 格式化——全链路只做整数运算，从根本上消除精度问题，这也是主流支付系统的通行做法。</p>
+  </section>
+
+  <!-- ======================= 4. 系统架构 ======================= -->
+  <section id="s4">
+    <h2><span class="no">04</span>系统架构设计</h2>
+
+    <h3>4.1 总体架构</h3>
+    <p>前后端完全分离：前端为纯静态 SPA，后端只提供 REST/JSON API。生产环境中两者由 Nginx 统一入口（同源部署），既简化了 CORS 与 Cookie 策略，也便于将来拆分为独立域名或加 CDN。</p>
+
+    <div class="fig">
+      <svg viewBox="0 0 900 575" role="img" aria-label="系统总体架构图">
+        <defs>
+          <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#94a3b8"/>
+          </marker>
+          <marker id="arrP" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#7c3aed"/>
+          </marker>
+        </defs>
+        <!-- 客户端 -->
+        <rect x="60" y="30" width="780" height="96" rx="12" fill="#eef2ff" stroke="#c7d2fe"/>
+        <text x="80" y="58" font-size="13" font-weight="700" fill="#3730a3">客户端层 · 响应式 SPA（Vue 3 + TS）</text>
+        <rect x="80" y="72" width="220" height="40" rx="8" fill="#fff" stroke="#c7d2fe"/>
+        <text x="190" y="97" font-size="12.5" fill="#3730a3" text-anchor="middle">手机 Chrome / Edge（360px+）</text>
+        <rect x="340" y="72" width="220" height="40" rx="8" fill="#fff" stroke="#c7d2fe"/>
+        <text x="450" y="97" font-size="12.5" fill="#3730a3" text-anchor="middle">平板（768px+）</text>
+        <rect x="600" y="72" width="220" height="40" rx="8" fill="#fff" stroke="#c7d2fe"/>
+        <text x="710" y="97" font-size="12.5" fill="#3730a3" text-anchor="middle">桌面（1280px+）</text>
+        <!-- 箭头 客户端 -> nginx -->
+        <line x1="450" y1="126" x2="450" y2="172" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+        <text x="462" y="154" font-size="11.5" fill="#64748b">HTTPS · 静态资源 + /api 请求</text>
+        <!-- Nginx -->
+        <rect x="60" y="180" width="780" height="86" rx="12" fill="#ecfeff" stroke="#a5f3fc"/>
+        <text x="80" y="208" font-size="13" font-weight="700" fill="#155e75">接入层 · Nginx 容器</text>
+        <rect x="80" y="220" width="330" height="34" rx="8" fill="#fff" stroke="#a5f3fc"/>
+        <text x="245" y="242" font-size="12.5" fill="#155e75" text-anchor="middle">① 托管前端静态产物（SPA 路由回退）</text>
+        <rect x="440" y="220" width="380" height="34" rx="8" fill="#fff" stroke="#a5f3fc"/>
+        <text x="630" y="242" font-size="12.5" fill="#155e75" text-anchor="middle">② 反向代理 /api → API 容器 :3000</text>
+        <!-- 箭头 nginx -> api -->
+        <line x1="450" y1="266" x2="450" y2="312" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+        <!-- API -->
+        <rect x="60" y="320" width="780" height="110" rx="12" fill="#f5f3ff" stroke="#ddd6fe"/>
+        <text x="80" y="348" font-size="13" font-weight="700" fill="#5b21b6">应用层 · NestJS API 容器（REST / JSON）</text>
+        <rect x="80" y="360" width="172" height="52" rx="8" fill="#fff" stroke="#ddd6fe"/>
+        <text x="166" y="382" font-size="12" fill="#5b21b6" text-anchor="middle">Auth 认证模块</text>
+        <text x="166" y="399" font-size="10.5" fill="#8b5cf6" text-anchor="middle">JWT · TOTP · 限流</text>
+        <rect x="268" y="360" width="172" height="52" rx="8" fill="#fff" stroke="#ddd6fe"/>
+        <text x="354" y="382" font-size="12" fill="#5b21b6" text-anchor="middle">Ledger 记账模块</text>
+        <text x="354" y="399" font-size="10.5" fill="#8b5cf6" text-anchor="middle">账户 · 分类 · 流水</text>
+        <rect x="456" y="360" width="172" height="52" rx="8" fill="#fff" stroke="#ddd6fe"/>
+        <text x="542" y="382" font-size="12" fill="#5b21b6" text-anchor="middle">Item 物品模块</text>
+        <text x="542" y="399" font-size="10.5" fill="#8b5cf6" text-anchor="middle">物品 · 配件 · 成本</text>
+        <rect x="644" y="360" width="176" height="52" rx="8" fill="#fff" stroke="#ddd6fe"/>
+        <text x="732" y="382" font-size="12" fill="#5b21b6" text-anchor="middle">Family / Dashboard</text>
+        <text x="732" y="399" font-size="10.5" fill="#8b5cf6" text-anchor="middle">家庭 · 邀请码 · 看板</text>
+        <!-- 箭头 api -> db -->
+        <line x1="280" y1="430" x2="280" y2="474" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+        <line x1="620" y1="430" x2="620" y2="474" stroke="#94a3b8" stroke-width="2" marker-end="url(#arr)"/>
+        <!-- DB / Redis -->
+        <rect x="130" y="482" width="300" height="56" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <text x="280" y="506" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">MySQL 8.4（InnoDB · utf8mb4）</text>
+        <text x="280" y="524" font-size="11" fill="#64748b" text-anchor="middle">持久化数据卷 mysql_data · 单实例 · 内网隔离</text>
+        <rect x="470" y="482" width="300" height="56" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <text x="620" y="506" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Redis 7（AOF 持久化）</text>
+        <text x="620" y="524" font-size="11" fill="#64748b" text-anchor="middle">限流 · 令牌吊销 · 看板缓存</text>
+        <!-- 内网标注 -->
+        <text x="450" y="556" font-size="11" fill="#94a3b8" text-anchor="middle">内网 Docker 网络 backend：仅 Nginx 暴露 80/443 端口，MySQL / Redis 不对外</text>
+      </svg>
+      <div class="cap">图 4-1 系统总体架构（生产环境）</div>
+    </div>
+
+    <h3>4.2 请求链路</h3>
+    <ol>
+      <li>浏览器请求 <code>https://host/</code> → Nginx 返回 SPA 静态资源；</li>
+      <li>SPA 发起 <code>https://host/api/v1/...</code> → Nginx <code>proxy_pass</code> 到 <code>api:3000</code>（同源，无跨域问题）；</li>
+      <li>API 通过 Guard 校验 JWT → 业务模块校验数据域权限（个人 / 家庭）→ Prisma 访问 MySQL；</li>
+      <li>Token 中 <code>mfa:true</code> 声明代表该会话已完成两步验证，未完成的会话仅允许访问 MFA 相关端点。</li>
+    </ol>
+
+    <h3>4.3 关键技术决策记录（ADR 摘要）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:190px">决策</th><th>结论与理由</th></tr></thead>
+        <tbody>
+          <tr><td>前后端同源（Nginx 统一入口）</td><td>免 CORS 配置、Cookie 策略简单、防 CSRF 更容易；开发期用 Vite Dev Server 的 proxy 模拟同源。</td></tr>
+          <tr><td>金额以整数「分」传输</td><td>前后端 JSON 中金额字段一律为整数分（如 <code>40000</code> 表示 ¥400.00），杜绝浮点误差。</td></tr>
+          <tr><td>统一「数据域」模型</td><td>账户 / 分类 / 流水 / 物品四类数据共享 <code>owner_type('user'|'household') + owner_id</code> 双字段归属模型，一套权限逻辑覆盖全部业务表。</td></tr>
+          <tr><td>软删除 + 回收站</td><td>记账数据误删代价高，全部业务表使用 <code>deleted_at</code> 软删除，回收站保留 30 天。</td></tr>
+          <tr><td>时间统一 UTC</td><td>数据库存 UTC（<code>DATETIME(3)</code>），API 传输 ISO 8601，前端按用户时区渲染。</td></tr>
+          <tr><td>主键采用 UUID v7</td><td>时间有序、不可枚举、便于未来多端离线写入合并；MySQL 中以 <code>BINARY(16)</code> 存储兼顾索引性能。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= 5. 数据模型 ======================= -->
+  <section id="s5">
+    <h2><span class="no">05</span>数据模型设计</h2>
+
+    <h3>5.1 实体关系总览</h3>
+    <div class="fig">
+      <svg viewBox="0 0 960 620" role="img" aria-label="核心实体关系图">
+        <defs>
+          <marker id="fk" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#94a3b8"/>
+          </marker>
+          <marker id="fkv" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#a78bfa"/>
+          </marker>
+        </defs>
+        <!-- 图例 -->
+        <rect x="20" y="16" width="920" height="56" rx="8" fill="#f8fafc" stroke="#e5e7eb"/>
+        <text x="40" y="40" font-size="12" fill="#475569">图例：实线 = 外键引用（1:N）　虚线 = 多态归属（◆ 标记的四张表含 owner_type / owner_id → users 或 households）</text>
+        <text x="40" y="60" font-size="12" fill="#475569">派生原则：账户余额 ← Σ 流水；物品成本 ← 流水分摊 + 配件消耗；看板 ← 流水聚合 —— 流水为唯一权威数据源</text>
+        <!-- users -->
+        <rect x="60" y="100" width="150" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="135" y="122" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">users</text>
+        <text x="135" y="140" font-size="10.5" fill="#64748b" text-anchor="middle">用户（含 MFA 凭据）</text>
+        <!-- households -->
+        <rect x="270" y="100" width="160" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="350" y="122" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">households</text>
+        <text x="350" y="140" font-size="10.5" fill="#64748b" text-anchor="middle">家庭</text>
+        <!-- accounts -->
+        <rect x="500" y="100" width="150" height="52" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.5"/>
+        <text x="575" y="122" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">◆ accounts</text>
+        <text x="575" y="140" font-size="10.5" fill="#64748b" text-anchor="middle">资产账户（含利息配置）</text>
+        <!-- categories -->
+        <rect x="730" y="100" width="160" height="52" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.5"/>
+        <text x="810" y="122" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">◆ categories</text>
+        <text x="810" y="140" font-size="10.5" fill="#64748b" text-anchor="middle">自定义分类（层级）</text>
+        <!-- refresh_tokens -->
+        <rect x="60" y="270" width="150" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="135" y="292" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">refresh_tokens</text>
+        <text x="135" y="310" font-size="10.5" fill="#64748b" text-anchor="middle">刷新令牌会话</text>
+        <!-- household_members -->
+        <rect x="270" y="270" width="170" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="355" y="292" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">household_members</text>
+        <text x="355" y="310" font-size="10.5" fill="#64748b" text-anchor="middle">成员关系（角色）</text>
+        <!-- transactions -->
+        <rect x="490" y="270" width="175" height="58" rx="9" fill="#eef2ff" stroke="#818cf8" stroke-width="2"/>
+        <text x="577" y="295" font-size="13" font-weight="700" fill="#3730a3" text-anchor="middle">◆ transactions</text>
+        <text x="577" y="314" font-size="10.5" fill="#6366f1" text-anchor="middle">记账流水（金额唯一权威源）</text>
+        <!-- transaction_items -->
+        <rect x="700" y="270" width="170" height="58" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.5"/>
+        <text x="785" y="295" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">transaction_items</text>
+        <text x="785" y="314" font-size="10.5" fill="#64748b" text-anchor="middle">流水-物品分摊（多物品）</text>
+        <!-- recovery_codes -->
+        <rect x="60" y="400" width="150" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="135" y="422" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">recovery_codes</text>
+        <text x="135" y="440" font-size="10.5" fill="#64748b" text-anchor="middle">MFA 恢复码</text>
+        <!-- household_invites -->
+        <rect x="270" y="400" width="170" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="355" y="422" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">household_invites</text>
+        <text x="355" y="440" font-size="10.5" fill="#64748b" text-anchor="middle">邀请码（哈希存储）</text>
+        <!-- items -->
+        <rect x="700" y="410" width="170" height="58" rx="9" fill="#fff" stroke="#c7d2fe" stroke-width="1.5"/>
+        <text x="785" y="435" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">◆ items</text>
+        <text x="785" y="454" font-size="10.5" fill="#64748b" text-anchor="middle">物品档案</text>
+        <!-- item_accessories -->
+        <rect x="700" y="540" width="170" height="52" rx="9" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="785" y="562" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">item_accessories</text>
+        <text x="785" y="580" font-size="10.5" fill="#64748b" text-anchor="middle">配件库存</text>
+        <!-- 连线：users -> refresh_tokens -->
+        <line x1="110" y1="152" x2="110" y2="270" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <text x="118" y="205" font-size="10.5" fill="#64748b">1:N</text>
+        <!-- refresh -> recovery -->
+        <line x1="135" y1="322" x2="135" y2="400" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <!-- users -> household_members -->
+        <path d="M220,126 L240,126 L240,296 L270,296" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <text x="248" y="200" font-size="10.5" fill="#64748b">1:N（成员）</text>
+        <!-- households -> household_members -->
+        <line x1="390" y1="152" x2="390" y2="270" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <text x="398" y="205" font-size="10.5" fill="#64748b">1:N</text>
+        <!-- household_members -> household_invites -->
+        <line x1="355" y1="322" x2="355" y2="400" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <!-- transactions -> accounts (多态) -->
+        <path d="M577,270 L577,152" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fkv)"/>
+        <text x="585" y="205" font-size="10.5" fill="#8b5cf6">account_id</text>
+        <!-- transactions -> categories (多态) -->
+        <path d="M665,285 L680,285 L680,230 L810,230 L810,152" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fkv)"/>
+        <text x="686" y="222" font-size="10.5" fill="#8b5cf6">category_id</text>
+        <!-- transactions -> transaction_items（分摊） -->
+        <line x1="665" y1="305" x2="700" y2="305" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#fkv)"/>
+        <text x="668" y="299" font-size="10.5" fill="#8b5cf6">N:M</text>
+        <!-- transaction_items -> items -->
+        <line x1="785" y1="328" x2="785" y2="410" stroke="#818cf8" stroke-width="1.5" marker-end="url(#fk)"/>
+        <text x="793" y="372" font-size="10.5" fill="#64748b">1:N</text>
+        <!-- items -> item_accessories -->
+        <line x1="785" y1="468" x2="785" y2="540" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#fk)"/>
+        <text x="793" y="507" font-size="10.5" fill="#64748b">1:N</text>
+      </svg>
+      <div class="cap">图 5-1 核心实体关系图（12 张业务表 + 图例）</div>
+    </div>
+
+    <h3>5.2 表结构定义</h3>
+
+    <h4>① users — 用户（含 MFA 凭据）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code> PK</td><td>BINARY(16)</td><td>UUID v7</td></tr>
+          <tr><td><code>email</code> UQ</td><td>VARCHAR(190)</td><td>登录邮箱，唯一索引</td></tr>
+          <tr><td><code>nickname</code></td><td>VARCHAR(40)</td><td>昵称</td></tr>
+          <tr><td><code>password_hash</code></td><td>VARCHAR(255)</td><td><strong>Argon2id 哈希</strong>（含算法参数与盐），绝不存明文</td></tr>
+          <tr><td><code>totp_secret_enc</code></td><td>VARBINARY(255) NULL</td><td><strong>AES-256-GCM 加密</strong>后的 TOTP 密钥（密文 + IV + Tag）</td></tr>
+          <tr><td><code>mfa_enabled</code></td><td>TINYINT(1)</td><td>是否已开启两步验证</td></tr>
+          <tr><td><code>last_totp_step</code></td><td>BIGINT NULL</td><td>最后成功验证的 TOTP 时间步，<strong>防重放</strong></td></tr>
+          <tr><td><code>status</code></td><td>ENUM</td><td>active / locked / disabled</td></tr>
+          <tr><td><code>created_at / updated_at</code></td><td>DATETIME(3)</td><td>UTC</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>② refresh_tokens — 刷新令牌会话</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code> PK</td><td>BINARY(16)</td><td>UUID v7</td></tr>
+          <tr><td><code>user_id</code> FK</td><td>BINARY(16)</td><td>→ users.id</td></tr>
+          <tr><td><code>token_hash</code> UQ</td><td>CHAR(64)</td><td><strong>SHA-256 哈希</strong>，令牌原文只存在于用户设备 Cookie</td></tr>
+          <tr><td><code>family_id</code></td><td>BINARY(16)</td><td>令牌族 ID，用于检测令牌盗用后的「整族吊销」</td></tr>
+          <tr><td><code>expires_at</code> / <code>revoked_at</code></td><td>DATETIME(3)</td><td>有效期 14 天；轮换时旧令牌立即吊销</td></tr>
+          <tr><td><code>ua_hash</code> / <code>ip_hash</code></td><td>CHAR(64)</td><td>设备指纹哈希，供「登录设备管理」展示与异常检测</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>③ recovery_codes — MFA 恢复码</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code> PK</td><td>BINARY(16)</td><td>UUID v7</td></tr>
+          <tr><td><code>user_id</code> FK</td><td>BINARY(16)</td><td>→ users.id</td></tr>
+          <tr><td><code>code_hash</code></td><td>CHAR(64)</td><td><strong>SHA-256(盐) 哈希</strong>，10 个一次性码，用完即焚</td></tr>
+          <tr><td><code>used_at</code></td><td>DATETIME(3) NULL</td><td>已使用时间（用于审计）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>④ households / household_members / household_invites — 家庭与邀请</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td colspan="3"><strong>households</strong>：<code>id</code> PK · <code>name</code> VARCHAR(40) 家庭名 · <code>owner_id</code> FK→users 家庭创建者 · <code>created_at</code></td></tr>
+          <tr><td colspan="3"><strong>household_members</strong>：<code>household_id</code> + <code>user_id</code> 复合唯一 · <code>role</code> ENUM('owner','member') · <code>joined_at</code></td></tr>
+          <tr><td colspan="3"><strong>household_invites</strong>：<code>id</code> · <code>household_id</code> FK · <code>code_hash</code> CHAR(64) <strong>邀请码哈希</strong> · <code>expires_at</code>（默认 72 小时） · <code>max_uses</code> / <code>used_count</code> · <code>created_by</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>⑤ accounts — 资产账户 <span class="tag tag-owner">◆ 多态归属</span></h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>owner_type / owner_id</code></td><td>ENUM / BINARY(16)</td><td>归属：user 或 household</td></tr>
+          <tr><td><code>name</code></td><td>VARCHAR(40)</td><td>账户名（工资卡、微信零钱…）</td></tr>
+          <tr><td><code>type</code></td><td>ENUM</td><td>cash / bank / payment / investment / credit / other</td></tr>
+          <tr><td><code>initial_balance_minor</code></td><td>BIGINT</td><td><strong>建账初始余额（分）</strong>；当前余额由流水派生</td></tr>
+          <tr><td><code>currency</code></td><td>CHAR(3)</td><td>v1.0 默认 CNY（保留字段为多币种预留）</td></tr>
+          <tr><td><code>interest_rate_bp</code></td><td>INT NULL</td><td><strong>年化利率（基点，1bp = 0.01%）</strong>；NULL = 不计息（详见 8.5）</td></tr>
+          <tr><td><code>interest_freq</code></td><td>ENUM NULL</td><td>结息周期：monthly / quarterly / yearly</td></tr>
+          <tr><td><code>interest_posted_at</code></td><td>DATE NULL</td><td>上次结息日，用于幂等防重复入账</td></tr>
+          <tr><td><code>sort_order / archived_at / deleted_at</code></td><td>INT / DATETIME</td><td>排序、归档（隐藏但保留数据）、软删除</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>⑥ categories — 自定义分类 <span class="tag tag-owner">◆ 多态归属</span></h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>owner_type / owner_id</code></td><td>ENUM / BINARY(16)</td><td>归属：user 或 household</td></tr>
+          <tr><td><code>kind</code></td><td>ENUM</td><td>expense / income，两套分类树完全独立</td></tr>
+          <tr><td><code>name</code></td><td>VARCHAR(30)</td><td>分类名（餐饮、交通、投资收益…）</td></tr>
+          <tr><td><code>icon / color</code></td><td>VARCHAR(40)</td><td>图标名 + 主题色，前端渲染</td></tr>
+          <tr><td><code>parent_id</code></td><td>BINARY(16) NULL</td><td>支持两级子分类（如 餐饮 → 外卖）</td></tr>
+          <tr><td><code>system_tag</code></td><td>VARCHAR(30) NULL</td><td>系统语义标签，如 <code>investment_return</code> 供「收益」看板识别</td></tr>
+          <tr><td><code>is_preset / sort_order</code></td><td>TINYINT / INT</td><td>预置分类（可编辑可删除）与排序</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>⑦ transactions — 记账流水（核心表）<span class="tag tag-owner">◆ 多态归属</span></h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>owner_type / owner_id</code></td><td>ENUM / BINARY(16)</td><td>归属：个人或家庭</td></tr>
+          <tr><td><code>type</code></td><td>ENUM</td><td>expense / income / transfer_out / transfer_in</td></tr>
+          <tr><td><code>amount_minor</code></td><td>BIGINT UNSIGNED</td><td><strong>金额（分），恒为正数</strong>，方向由 type 决定</td></tr>
+          <tr><td><code>account_id</code> FK</td><td>BINARY(16)</td><td>发生账户（转账则为转出 / 转入账户）</td></tr>
+          <tr><td><code>category_id</code> FK</td><td>BINARY(16) NULL</td><td>分类（转账无需分类）</td></tr>
+          <tr><td><code>item_links</code></td><td>—</td><td><strong>物品关联</strong>统一走 <code>transaction_items</code> 分摊表（支持一笔流水关联多个物品）</td></tr>
+          <tr><td><code>transfer_group_id</code></td><td>BINARY(16) NULL</td><td>转账成对记录（转出 + 转入）共享同一 GroupID，保证原子与可追溯</td></tr>
+          <tr><td><code>occurred_at</code></td><td>DATETIME(3)</td><td>业务发生时间（用户可改）</td></tr>
+          <tr><td><code>note</code></td><td>VARCHAR(200)</td><td>备注</td></tr>
+          <tr><td><code>created_by</code> FK</td><td>BINARY(16)</td><td>记录人（家庭共享时区分谁记的）</td></tr>
+          <tr><td><code>created_at / updated_at / deleted_at</code></td><td>DATETIME(3)</td><td>审计与软删除</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13px;color:var(--c-text-3)">索引：<code>(owner_type, owner_id, occurred_at DESC)</code>、<code>(account_id, occurred_at)</code>、<code>(category_id, occurred_at)</code>、<code>(transfer_group_id)</code>。（物品维度查询走 <code>transaction_items</code> 索引）</p>
+
+    <h4>⑧ transaction_items — 流水-物品分摊（支持多物品关联）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>transaction_id</code> FK</td><td>BINARY(16)</td><td>→ transactions.id</td></tr>
+          <tr><td><code>item_id</code> FK</td><td>BINARY(16)</td><td>→ items.id；同一流水下唯一</td></tr>
+          <tr><td><code>amount_minor</code></td><td>BIGINT NULL</td><td><strong>该物品分摊的金额（分）</strong>；<strong>NULL = 继承流水金额</strong>（仅单物品场景允许）</td></tr>
+          <tr><td><code>created_at</code></td><td>DATETIME(3)</td><td>UTC</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="box box-info">
+      <p><b>分摊规则：</b>一笔流水可关联 1～N 个物品——只关联 1 个时金额可不填（自动继承流水全额，如「买一把牙刷 ¥400」）；关联多个时逐个指定金额（如「牙刷 ¥400 + 12 个刷头 ¥240」），服务端校验 <code>Σ 分摊金额 ≤ 流水金额</code>，差额在详情页显示为「未分摊金额」。物品详情页的「关联流水」时间线由本表反查生成。</p>
+    </div>
+    <p style="font-size:13px;color:var(--c-text-3)">索引：<code>UNIQUE(transaction_id, item_id)</code>、<code>(item_id, created_at)</code>。</p>
+
+    <h4>⑨ items — 物品档案 <span class="tag tag-owner">◆ 多态归属</span></h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>owner_type / owner_id</code></td><td>ENUM / BINARY(16)</td><td>归属：个人或家庭</td></tr>
+          <tr><td><code>name</code></td><td>VARCHAR(60)</td><td>物品名（电动牙刷）</td></tr>
+          <tr><td><code>purchase_price_minor</code></td><td>BIGINT</td><td><strong>物品本体购买价（分）</strong>；若由流水创建，默认取流水分摊金额</td></tr>
+          <tr><td><code>currency</code></td><td>CHAR(3)</td><td>默认 CNY，与关联流水币种一致（多币种预留，见 5.4）</td></tr>
+          <tr><td><code>purchase_date</code></td><td>DATE</td><td>购买日期（持有期计算的起点）</td></tr>
+          <tr><td><code>expected_lifespan_days</code></td><td>INT NULL</td><td>预期寿命天数（可选），用于「预计日均成本」</td></tr>
+          <tr><td><code>status</code></td><td>ENUM</td><td>active 在用 / idle 闲置 / retired 退役 / lost 丢失</td></tr>
+          <tr><td><code>category_id / note / image_path</code></td><td>—</td><td>可选分类、备注、图片（存本地卷路径）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>⑩ item_accessories — 配件库存（如 12 个刷头）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>item_id</code> FK</td><td>BINARY(16)</td><td>→ items.id</td></tr>
+          <tr><td><code>name</code></td><td>VARCHAR(60)</td><td>配件名（替换刷头）</td></tr>
+          <tr><td><code>unit_price_minor</code></td><td>BIGINT</td><td><strong>单价（分）</strong></td></tr>
+          <tr><td><code>total_qty</code> / <code>used_qty</code></td><td>INT</td><td>购入总数 / 已使用数（12 / 2）；剩余 = 差值</td></tr>
+          <tr><td><code>purchased_at</code></td><td>DATE</td><td>配件购入日期（可分批，支持同一物品多行配件记录）</td></tr>
+          <tr><td><code>transaction_id</code> FK</td><td>BINARY(16) NULL</td><td>关联的购买流水（可选）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="box box-info">
+      <p><b>配件使用记录：</b><code>used_qty</code> 通过「使用一个 / 撤销一个」按钮增减，每次变更写入审计日志（<code>accessory_usages</code> 可选扩展表），保证可追溯是谁在什么时候用掉了一个刷头。</p>
+    </div>
+
+    <h3>5.3 数据完整性约束</h3>
+    <ul>
+      <li>所有外键建立真实 FOREIGN KEY 约束（InnoDB），删除父行前先校验子行；</li>
+      <li>金额字段统一 <code>BIGINT</code>，服务层 DTO 校验 <code>amount_minor ≥ 0</code> 且为整数；</li>
+      <li><code>owner_type</code> 用 ENUM 约束取值范围，<code>(owner_type, owner_id)</code> 复合索引覆盖全部业务查询；</li>
+      <li>转账两行记录在同一数据库事务中写入，任一行失败则整体回滚；</li>
+      <li>物品分摊（服务层校验 + 事务内写入）：<code>Σ(transaction_items.amount_minor) ≤ transactions.amount_minor</code>，超出即拒绝；同一流水下 <code>item_id</code> 唯一；单物品且未指定金额时 <code>amount_minor</code> 置 NULL，语义为「继承流水金额」；</li>
+      <li>利息入账幂等：<code>accounts.interest_posted_at</code> 与利息流水一一对应，同一结息周期重复触发不会生成两笔（详见 8.5）；</li>
+      <li>软删除行的唯一约束通过 <code>deleted_at IS NULL</code> 生成列方案处理（如账户名在同一数据域内不重复）。</li>
+    </ul>
+
+    <h3>5.4 货币与汇率扩展设计（v1.0 仅 CNY，结构预留）</h3>
+    <p>v1.0 只支持人民币，但全库金额字段均携带 <code>currency CHAR(3)</code> 列（默认 <code>CNY</code>），并预留汇率表与转换服务接口，后续启用多币种时<strong>无需改动已有表结构</strong>：</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:190px">预留项</th><th>设计</th></tr></thead>
+        <tbody>
+          <tr><td><code>exchange_rates</code> 表</td><td><code>from_currency</code> / <code>to_currency</code> / <code>rate DECIMAL(18,8)</code> / <code>effective_date</code> / <code>source</code>；索引 <code>(from_currency, to_currency, effective_date DESC)</code></td></tr>
+          <tr><td><code>CurrencyService</code> 接口</td><td><code>getRate(from, to, date)</code> —— v1.0 实现为恒等转换（CNY→CNY = 1）；汇率数据源做成 Provider 接口，后续接公开汇率 API 或手动维护，业务代码不感知实现</td></tr>
+          <tr><td>折算规则</td><td>跨币种汇总时按「交易发生日汇率」折算到用户主币种；汇率缺失时降级为 1:1 并在界面显式标注，绝不静默按错误汇率计算</td></tr>
+          <tr><td>用户主币种</td><td>用户偏好（settings）预留 <code>base_currency</code>，v1.0 固定 CNY，看板与余额按主币种展示</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ======================= 6. API ======================= -->
+  <section id="s6">
+    <h2><span class="no">06</span>API 接口设计</h2>
+
+    <h3>6.1 设计约定</h3>
+    <ul>
+      <li>风格：REST + JSON，路径前缀 <code>/api/v1</code>，资源名复数；</li>
+      <li>认证：<code>Authorization: Bearer &lt;access_token&gt;</code>（JWT，15 分钟）；刷新令牌走 HttpOnly Cookie；</li>
+      <li>统一响应包络：<code>{ code: 0, message: "ok", data: {...} }</code>；错误时 <code>code</code> 为业务错误码，HTTP 状态码同步语义（400/401/403/404/409/429）；</li>
+      <li>分页：游标分页（<code>?cursor=&amp;limit=20</code>），避免深分页性能问题；</li>
+      <li>幂等：记账创建接口支持 <code>Idempotency-Key</code> 头，防止移动端弱网重试造成重复记账；</li>
+      <li>文档：由 <code>@nestjs/swagger</code> 自动生成 OpenAPI 3 文档，挂载在 <code>/api/docs</code>（生产环境加访问口令）。</li>
+    </ul>
+
+    <h3>6.2 端点清单</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:80px">方法</th><th style="width:290px">路径</th><th>说明</th><th style="width:120px">认证</th></tr></thead>
+        <tbody>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">认证与 MFA（模块 Auth）</td></tr>
+          <tr><td>POST</td><td><code>/auth/register</code></td><td>注册：邮箱 + 密码，密码强度与泄露检查，Argon2id 入库</td><td>公开 · 限流</td></tr>
+          <tr><td>POST</td><td><code>/auth/login</code></td><td>第一步：校验密码 → 若已开 MFA 返回 <code>mfa_required</code> 短期票据</td><td>公开 · 限流</td></tr>
+          <tr><td>POST</td><td><code>/auth/mfa/verify</code></td><td>第二步：校验 TOTP / 恢复码 → 签发正式令牌对</td><td>mfa 票据</td></tr>
+          <tr><td>POST</td><td><code>/auth/mfa/setup</code></td><td>生成 TOTP 密钥 + otpauth 二维码（仅绑定前临时存于服务端）</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/auth/mfa/enable</code></td><td>输入一次有效动态码，确认开启；返回 10 个恢复码（仅此一次展示）</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/auth/mfa/disable</code></td><td>关闭 MFA（需密码 + 动态码双验证）</td><td>JWT · 强验证</td></tr>
+          <tr><td>POST</td><td><code>/auth/token/refresh</code></td><td>刷新令牌旋转：旧令牌吊销，检测盗用则整族吊销</td><td>Cookie</td></tr>
+          <tr><td>POST</td><td><code>/auth/logout</code> / <code>/auth/logout-all</code></td><td>登出当前设备 / 全部设备</td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/auth/sessions</code></td><td>登录设备列表（脱敏 UA/IP）与远程下线</td><td>JWT</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">记账（模块 Ledger）</td></tr>
+          <tr><td>GET/POST</td><td><code>/accounts</code></td><td>资产账户列表（含派生余额与计息配置）/ 新建</td><td>JWT</td></tr>
+          <tr><td>PATCH/DELETE</td><td><code>/accounts/:id</code></td><td>编辑（含利息配置：年化利率、结息周期）/ 归档 / 删除（无流水时才可删）</td><td>JWT · 属主校验</td></tr>
+          <tr><td>POST</td><td><code>/accounts/:id/interest/run</code></td><td>利息结算：预览 / 手动入账（幂等，系统按周期自动执行，详见 8.5）</td><td>JWT · 属主校验</td></tr>
+          <tr><td>GET/POST</td><td><code>/categories?kind=expense</code></td><td>分类树查询 / 新建自定义分类</td><td>JWT</td></tr>
+          <tr><td>PATCH/DELETE</td><td><code>/categories/:id</code></td><td>编辑（名称/图标/颜色/排序）/ 删除（有流水则改为停用）</td><td>JWT · 属主校验</td></tr>
+          <tr><td>GET</td><td><code>/transactions</code></td><td>流水列表：<code>?domain=user|household:hid&amp;from=&amp;to=&amp;category_id=&amp;account_id=&amp;item_id=&amp;cursor=</code></td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/transactions</code></td><td>记一笔（支出/收入/转账）；可关联 1～N 个物品并逐个指定分摊金额；转账自动生成成对记录</td><td>JWT · 幂等</td></tr>
+          <tr><td>PATCH/DELETE</td><td><code>/transactions/:id</code></td><td>修改（转账成对联动）/ 软删除（进回收站）</td><td>JWT · 属主校验</td></tr>
+          <tr><td>GET</td><td><code>/transactions/summary</code></td><td>指定区间的收入 / 支出 / 结余小计</td><td>JWT</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">物品与配件（模块 Item）</td></tr>
+          <tr><td>GET/POST</td><td><code>/items</code></td><td>物品列表（含成本指标）/ 新建物品</td><td>JWT</td></tr>
+          <tr><td>GET/PATCH/DELETE</td><td><code>/items/:id</code></td><td>物品详情（成本详情 + 关联流水 + 配件）/ 编辑 / 删除</td><td>JWT · 属主校验</td></tr>
+          <tr><td>POST</td><td><code>/items/:id/accessories</code></td><td>添加配件批次（名称、单价、总数、购入日期）</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/accessories/:id/consume</code></td><td>消耗 <code>{qty: 1}</code> 个配件（used_qty + n，不可超过剩余）</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/accessories/:id/restore</code></td><td>撤销消耗（used_qty - n，不可小于 0）</td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/items/overview</code></td><td>「物品」看板：总投入、在役物品数、配件库存价值、成本排行</td><td>JWT</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">家庭（模块 Family）</td></tr>
+          <tr><td>GET/POST</td><td><code>/households</code></td><td>我的家庭列表 / 创建家庭</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/households/:id/invites</code></td><td>生成邀请码（有效期、最大使用次数）</td><td>JWT · owner</td></tr>
+          <tr><td>POST</td><td><code>/households/join</code></td><td>凭邀请码加入家庭</td><td>JWT · 限流</td></tr>
+          <tr><td>GET/DELETE</td><td><code>/households/:id/members[/:uid]</code></td><td>成员列表 / 移除成员（owner）/ 成员自行退出</td><td>JWT · 属主校验</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">看板与设置（模块 Dashboard / User）</td></tr>
+          <tr><td>GET</td><td><code>/dashboard/trend</code></td><td>趋势数据：<code>?domain=&amp;metric=expense|saving|income|interest|net_worth&amp;granularity=day|week|month&amp;from=&amp;to=</code></td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/dashboard/breakdown</code></td><td>分类占比 / 账户分布 / 环比同比</td><td>JWT</td></tr>
+          <tr><td>GET/PATCH</td><td><code>/users/me</code></td><td>个人资料查看 / 修改昵称</td><td>JWT</td></tr>
+          <tr><td>POST</td><td><code>/users/me/password</code></td><td>修改密码（旧密码 + TOTP 双验证，改后吊销全部会话）</td><td>JWT · 强验证</td></tr>
+          <tr><td>GET</td><td><code>/users/me/preferences</code></td><td>用户偏好（默认数据域、主题、货币符号等）</td><td>JWT</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6.3 关键接口示例</h3>
+    <h4>记一笔（多物品分摊 + 数据域选择）</h4>
+    <pre class="code"><span class="c">// POST /api/v1/transactions —— 一笔采购关联多个物品并分摊金额</span>
+{
+  <span class="s">"owner"</span>:      { <span class="s">"type"</span>: <span class="s">"household"</span>, <span class="s">"id"</span>: <span class="s">"018f...a1"</span> },   <span class="c">// 或 {"type":"user"}</span>
+  <span class="s">"type"</span>:       <span class="s">"expense"</span>,
+  <span class="s">"amount_minor"</span>: <span class="f">10000</span>,                    <span class="c">// ¥100.00，整数分</span>
+  <span class="s">"account_id"</span>: <span class="s">"018f...b2"</span>,
+  <span class="s">"category_id"</span>: <span class="s">"018f...c3"</span>,
+  <span class="s">"items"</span>: [                                  <span class="c">// 0～N 个物品；按顺序逐个指定分摊金额</span>
+    { <span class="s">"item_id"</span>: <span class="s">"018f...d5"</span>, <span class="s">"amount_minor"</span>: <span class="f">3000</span> },   <span class="c">// 洗衣液 ¥30</span>
+    { <span class="s">"item_id"</span>: <span class="s">"018f...d6"</span>, <span class="s">"amount_minor"</span>: <span class="f">2000</span> }    <span class="c">// 毛巾 ¥20 → 其余 ¥50 为「未分摊」</span>
+  ],
+  <span class="s">"occurred_at"</span>: <span class="s">"2026-09-18T10:30:00Z"</span>,
+  <span class="s">"note"</span>:        <span class="s">"超市采购"</span>
+}
+<span class="c">// 单物品简化写法：{ "items": [{ "item_id": "018f...d5" }] } → 省略金额即为全额 ¥100.00（继承）</span></pre>
+
+    <h4>物品详情（成本指标随详情返回）</h4>
+    <pre class="code"><span class="c">// GET /api/v1/items/:id  →  data:</span>
+{
+  <span class="s">"id"</span>: <span class="s">"018f...d4"</span>, <span class="s">"name"</span>: <span class="s">"电动牙刷"</span>,
+  <span class="s">"purchase_price_minor"</span>: <span class="f">40000</span>,          <span class="c">// ¥400.00</span>
+  <span class="s">"purchase_date"</span>: <span class="s">"2026-06-11"</span>,
+  <span class="s">"held_days"</span>: <span class="f">100</span>,
+  <span class="s">"accessories"</span>: [
+    { <span class="s">"name"</span>: <span class="s">"替换刷头"</span>, <span class="s">"unit_price_minor"</span>: <span class="f">2000</span>,
+      <span class="s">"total_qty"</span>: <span class="f">12</span>, <span class="s">"used_qty"</span>: <span class="f">2</span>, <span class="s">"remaining_qty"</span>: <span class="f">10</span> }
+  ],
+  <span class="s">"cost"</span>: {                              <span class="c">// 核心三指标（列表摘要与详情页必显）</span>
+    <span class="s">"pay_total_minor"</span>:      <span class="f">64000</span>,   <span class="c">// ① 总支付金额：400 + 12×20 = ¥640.00</span>
+    <span class="s">"hold_cost_minor"</span>:       <span class="f">44000</span>,   <span class="c">// ② 当前持有成本：400 + 2×20 = ¥440.00</span>
+    <span class="s">"daily_hold_cost_minor"</span>: <span class="f">440</span>,     <span class="c">// ③ 日均持有成本：440 / 100 天 = ¥4.40/天</span>
+    <span class="s">"remaining_stock_minor"</span>: <span class="f">20000</span>,  <span class="c">// ④ 剩余库存价值：10×20 = ¥200.00（详情页补充）</span>
+    <span class="s">"projected_daily_minor"</span>: <span class="f">400</span>,     <span class="c">// ⑤（可选）用完所有配件摊薄预计：640/预计寿命</span>
+    <span class="s">"unallocated_minor"</span>:     <span class="f">0</span>        <span class="c">// 未分摊金额（关联流水总额 − Σ分摊，详情页提示）</span>
+  }
+}</pre>
+  </section>
+
+  <!-- ======================= 7. 安全 ======================= -->
+  <section id="s7">
+    <h2><span class="no">07</span>安全设计（MFA / 加密）</h2>
+
+    <h3>7.1 凭据存储矩阵（「不明文」的具体落地）</h3>
+    <p>需求要求「数据库不使用明文存储信息」。落地策略：<strong>凡是可以被用来登录或提升权限的凭据，一律不可逆哈希或可逆加密后存储；业务数据本身通过访问控制 + 传输加密 + 磁盘层加密保护</strong>。逐项对照如下：</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:200px">数据项</th><th style="width:220px">存储形态</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>登录密码</td><td><strong>Argon2id 哈希</strong>（单向不可逆）</td><td>OWASP 推荐参数 <code>m=19456 KiB, t=2, p=1</code>；每用户独立随机盐；校验使用恒定时间比较</td></tr>
+          <tr><td>TOTP 密钥</td><td><strong>AES-256-GCM 加密</strong></td><td>密钥来自环境变量（KMS / secrets 挂载），数据库中仅存密文；GCM 自带完整性校验防篡改</td></tr>
+          <tr><td>MFA 恢复码</td><td><strong>SHA-256(盐) 哈希</strong></td><td>10 个一次性码，明文只在生成时展示一次；使用后标记 <code>used_at</code></td></tr>
+          <tr><td>刷新令牌</td><td><strong>SHA-256 哈希</strong></td><td>令牌原文只存在于用户设备 HttpOnly Cookie；服务端以哈希比对与吊销</td></tr>
+          <tr><td>邀请码</td><td><strong>SHA-256 哈希</strong></td><td>码原文仅在生成时展示；校验时对输入做哈希比对</td></tr>
+          <tr><td>邮箱</td><td>明文 + 唯一索引（可选项：AES 加密列）</td><td>需支持登录检索与查重；风险由访问控制 + 数据库账号最小权限 + 磁盘加密覆盖。<span class="tag tag-info">可选增强</span>如要求更严可启用「邮箱哈希列用于检索 + 密文列用于展示」的双列方案</td></tr>
+          <tr><td>记账业务数据</td><td>明文列（InnoDB 静态加密可选）</td><td>记账数据必须可读可聚合；保护手段：全链路 HTTPS、行级属主校验、数据库仅内网可达、账号最小权限、备份文件加密</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>7.2 认证流程（含 MFA 两步验证）</h3>
+
+    <h4>流程 A · 注册</h4>
+    <ol>
+      <li>填写邮箱 + 密码 → 前端实时校验强度（≥10 位，含大小写 / 数字 / 符号）→ 提交；</li>
+      <li>服务端查重 → Argon2id 哈希 → 写入 users；</li>
+      <li>自动签发「待开启 MFA」会话 → 引导进入 MFA 绑定页（可跳过，但每次登录提醒）。</li>
+    </ol>
+
+    <h4>流程 B · 首次绑定 MFA（TOTP）</h4>
+    <ol>
+      <li><code>POST /auth/mfa/setup</code> → 服务端生成 160-bit 随机密钥（Base32），生成 <code>otpauth://totp/ItemLife:user@mail?...</code> 二维码（内存态，不落库）；</li>
+      <li>用户用 Google / 微软 Authenticator 扫码；</li>
+      <li><code>POST /auth/mfa/enable</code> 提交一次有效动态码 → 服务端校验通过后将密钥 <strong>AES-256-GCM 加密</strong>落库、置 <code>mfa_enabled=1</code>；</li>
+      <li>服务端生成 10 个一次性恢复码 → 明文仅此一次下发 → 前端要求用户下载 / 抄录。</li>
+    </ol>
+
+    <h4>流程 C · 登录（两段式）</h4>
+    <div class="fig">
+      <svg viewBox="0 0 900 300" role="img" aria-label="MFA 登录时序图">
+        <defs>
+          <marker id="seq" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#4f46e5"/>
+          </marker>
+          <marker id="seqg" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto">
+            <path d="M0,0 L7,3 L0,6 Z" fill="#059669"/>
+          </marker>
+        </defs>
+        <!-- 泳道 -->
+        <rect x="40" y="20" width="130" height="40" rx="8" fill="#eef2ff" stroke="#c7d2fe"/>
+        <text x="105" y="45" font-size="12.5" font-weight="700" fill="#3730a3" text-anchor="middle">浏览器</text>
+        <rect x="380" y="20" width="130" height="40" rx="8" fill="#f5f3ff" stroke="#ddd6fe"/>
+        <text x="445" y="45" font-size="12.5" font-weight="700" fill="#5b21b6" text-anchor="middle">API 服务</text>
+        <rect x="720" y="20" width="140" height="40" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="790" y="45" font-size="12.5" font-weight="700" fill="#334155" text-anchor="middle">MySQL / Redis</text>
+        <!-- 步骤1 -->
+        <line x1="105" y1="60" x2="105" y2="270" stroke="#e2e8f0" stroke-width="1"/>
+        <line x1="445" y1="60" x2="445" y2="270" stroke="#e2e8f0" stroke-width="1"/>
+        <line x1="790" y1="60" x2="790" y2="270" stroke="#e2e8f0" stroke-width="1"/>
+        <line x1="105" y1="86" x2="440" y2="86" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#seq)"/>
+        <text x="272" y="80" font-size="11.5" fill="#4338ca" text-anchor="middle">① POST /auth/login（邮箱 + 密码）</text>
+        <line x1="445" y1="118" x2="785" y2="118" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#seq)"/>
+        <text x="615" y="112" font-size="11.5" fill="#4338ca" text-anchor="middle">② Argon2id 比对 + 限流计数</text>
+        <line x1="445" y1="152" x2="110" y2="152" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#seq)" stroke-dasharray="6 3"/>
+        <text x="272" y="146" font-size="11.5" fill="#4338ca" text-anchor="middle">③ 返回 mfa_required + 5 分钟短期票据（无正式权限）</text>
+        <line x1="105" y1="186" x2="440" y2="186" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#seq)"/>
+        <text x="272" y="180" font-size="11.5" fill="#4338ca" text-anchor="middle">④ POST /auth/mfa/verify（6 位动态码 / 恢复码）</text>
+        <line x1="445" y1="220" x2="785" y2="220" stroke="#4f46e5" stroke-width="1.6" marker-end="url(#seq)"/>
+        <text x="615" y="214" font-size="11.5" fill="#4338ca" text-anchor="middle">⑤ 解密 TOTP 密钥校验（±1 时间窗）+ 防重放记录</text>
+        <line x1="445" y1="256" x2="110" y2="256" stroke="#059669" stroke-width="1.8" marker-end="url(#seqg)"/>
+        <text x="272" y="250" font-size="11.5" fill="#047857" text-anchor="middle">⑥ Access JWT(15min, HttpOnly 外置) + Refresh Cookie(14d, 旋转)</text>
+      </svg>
+      <div class="cap">图 7-1 MFA 两段式登录时序</div>
+    </div>
+
+    <h3>7.3 会话与令牌策略</h3>
+    <div class="grid g2">
+      <div class="cell">
+        <h5>Access Token（JWT）</h5>
+        <p>有效期 15 分钟；HS256 签名（密钥 ≥ 256 bit，环境变量注入）；载荷仅含 <code>sub / sid / mfa / exp</code>，不含邮箱等隐私；前端存内存（不落 localStorage，缩小 XSS 影响面）。</p>
+      </div>
+      <div class="cell">
+        <h5>Refresh Token</h5>
+        <p>HttpOnly + Secure + SameSite=Lax Cookie，仅 <code>/api/v1/auth</code> 路径可见；14 天有效；<strong>每次刷新即轮换</strong>（旧令牌立即吊销）；检测到已吊销令牌被复用 → 整族吊销并强制重新登录（令牌盗用响应）。</p>
+      </div>
+      <div class="cell">
+        <h5>TOTP 防重放</h5>
+        <p>每个用户的 TOTP 验证记录「最后成功时间步」（Redis + DB 双写）；同一 30 秒窗口内第二次提交一律拒绝，防止动态码被截获后重放。</p>
+      </div>
+      <div class="cell">
+        <h5>登录失败防护</h5>
+        <p>按「账号 + IP」双维度 Redis 计数：15 分钟内 5 次失败 → 指数退避锁定（1min → 5min → 15min）；全部失败记录写入审计日志；响应统一模糊化（不区分「密码错」与「验证码错」）。</p>
+      </div>
+    </div>
+
+    <h3>7.4 传输与应用层防护</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:170px">威胁（OWASP）</th><th>防护措施</th></tr></thead>
+        <tbody>
+          <tr><td>SQL 注入</td><td>Prisma 全量参数化查询，禁止字符串拼接 SQL；数据库账号仅授权业务库 DML，无 DDL 权限</td></tr>
+          <tr><td>XSS</td><td>Vue 模板默认转义 + 禁用 <code>v-html</code>（如必须使用则接 DOMPurify）；Nginx 下发 CSP：<code>default-src 'self'</code>，禁内联脚本</td></tr>
+          <tr><td>CSRF</td><td>令牌走自定义 Authorization 头（天然免疫）；刷新接口依赖 SameSite Cookie + 自定义请求头双保险</td></tr>
+          <tr><td>越权（IDOR）</td><td>数据访问层统一封装 <code>OwnerGuard</code>：任何按 ID 读写前，先校验该行 <code>owner</code> 属于「当前用户本人」或「当前用户所属家庭」，否则 404（不泄露资源存在性）</td></tr>
+          <tr><td>暴力破解 / 撞库</td><td>登录与 MFA 接口强制限流；密码提交前做泄露库比对（可选 k-anonymity API）；MFA 大幅降低密码泄露后的风险</td></tr>
+          <tr><td>敏感信息泄露</td><td>响应体永不返回哈希 / 密钥字段；错误堆栈仅落服务端日志；Swagger 生产环境加口令</td></tr>
+          <tr><td>中间人</td><td>全站 HTTPS + HSTS；TLS 由外部反向代理统一终止与续期（详见 10.5）</td></tr>
+          <tr><td>文件上传（物品图片）</td><td>白名单扩展名 + 魔数校验 + 重命名存储 + 独立目录（不进 Web 根）+ 大小限制 5MB</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="box box-warn">
+      <p><b>环境变量与密钥管理：</b>数据库口令、JWT 签名密钥、AES 加密密钥、Redis 口令全部通过 <code>.env</code>（git 忽略）或 Docker secrets 注入，仓库内只提交 <code>.env.example</code> 示例文件；密钥轮换时 TOTP 密文以密钥版本号前缀标记，支持平滑迁移。</p>
+    </div>
+  </section>
+
+  <!-- ======================= 8. 业务逻辑 ======================= -->
+  <section id="s8">
+    <h2><span class="no">08</span>核心业务逻辑设计</h2>
+
+    <h3>8.1 记账与账户余额</h3>
+    <p><strong>余额派生规则（单一数据源）：</strong>账户当前余额不由人工维护，而是实时从流水派生：</p>
+    <div class="formula">
+余额(账户) = initial_balance + Σ(income) − Σ(expense) + Σ(transfer_in) − Σ(transfer_out)<br>
+<span class="cm">// 全部取自 transactions 表，deleted_at IS NULL，按 account_id 聚合</span>
+    </div>
+    <ul>
+      <li>净资产 = Σ(全部账户余额)，投资类账户单独着色展示；</li>
+      <li>转账：同一事务写入 <code>transfer_out</code>（转出账户）与 <code>transfer_in</code>（转入账户）两行，共享 <code>transfer_group_id</code>；编辑 / 删除时成对联动；</li>
+      <li>性能：金额聚合走覆盖索引 <code>(account_id, type, amount_minor)</code>；数据量大后引入每日快照表 <code>account_balance_daily</code>（当前规模不启用）。</li>
+    </ul>
+
+    <h3>8.2 物品与配件成本模型 <span class="tag tag-info">核心特色</span></h3>
+    <p>以需求原例说明：<strong>电动牙刷本体 400 元；同时购入 12 个替换刷头，单价 20 元；目前已用掉 2 个刷头；物品持有 100 天。</strong></p>
+
+    <div class="grid g4">
+      <div class="cell kpi"><div class="v">¥640.00</div><div class="l">① 总支付金额<br>400 + 12×20</div></div>
+      <div class="cell kpi"><div class="v">¥440.00</div><div class="l">② 当前持有成本<br>400 + 2×20</div></div>
+      <div class="cell kpi"><div class="v">¥4.40</div><div class="l">③ 日均持有成本<br>440 ÷ 100 天</div></div>
+      <div class="cell kpi"><div class="v">¥200.00</div><div class="l">④ 剩余配件价值<br>10 × 20</div></div>
+    </div>
+
+    <h4>指标定义</h4>
+    <div class="formula">
+① <span class="hl">pay_total</span>        = item.purchase_price + Σ(accessory.unit_price × total_qty)<br>
+    <span class="cm">「总支付金额」：为这件物品实付的全部金额（含全部配件库存）</span><br><br>
+② <span class="hl">hold_cost</span>        = item.purchase_price + Σ(accessory.unit_price × used_qty)<br>
+    <span class="cm">「当前持有成本」：物品 + 已用掉的配件——"到现在真正花在这件东西上的钱"（核心三指标之一）</span><br><br>
+③ <span class="hl">daily_hold_cost</span>  = hold_cost ÷ held_days<br>
+    <span class="cm">held_days = today − purchase_date + 1（≥1）</span><br>
+    <span class="cm">「日均持有成本」：需求中"物品+两个刷头的价格/物品持有日期"的落地公式</span><br><br>
+④ <span class="hl">remaining_stock</span>  = Σ(accessory.unit_price × (total_qty − used_qty))<br>
+    <span class="cm">「剩余库存价值」：还没用掉的配件值多少钱（可理解为"预存资产"）</span><br><br>
+⑤ <span class="hl">projected_daily</span>  = pay_total ÷ expected_lifespan_days　<span class="cm">（可选，仅当用户填写预期寿命时显示）</span>
+    </div>
+
+    <div class="box box-ok">
+      <p><b>展示设计（核心三指标）：</b><em>总支付金额</em>、<em>当前持有成本</em>、<em>日均持有成本</em> 为固定展示的核心指标。物品卡片列表中，移动端可精简展示（至少保留 <em>总支付 + 日均持有成本</em> 两项）；<strong>进入详情页必须完整显示全部指标</strong>（含当前持有成本、剩余配件价值）与「成本演进折线图」（横轴时间，纵轴累计消耗成本，配件每使用一枚出现一个台阶）。</p>
+    </div>
+
+    <div class="box box-ok">
+      <p><b>口径已确认：</b>「物品 + 两个刷头的价格 ÷ 物品持有日期」按 <strong>(物品价 + 已用配件价) ÷ 持有天数</strong> 落地（即 hold_cost ÷ held_days = 440 ÷ 100 = ¥4.40/天）。公式封装为独立 CostService 并参数化，后续如需调整口径（例如改为 pay_total ÷ held_days）仅改动一处。</p>
+    </div>
+
+    <h4>物品与记账的联动（多物品分摊）</h4>
+    <ul>
+      <li>一笔流水可关联 <strong>1～N 个物品</strong>，关联与分摊统一走 <code>transaction_items</code> 表（见 5.2 ⑧），每个物品可单独指定分摊金额；</li>
+      <li><strong>单物品简化写法：</strong>不填分摊金额时 <code>amount_minor = NULL</code>，表示继承整笔流水金额（仅单物品场景允许）；</li>
+      <li><strong>未分摊差额：</strong>Σ分摊金额 ≤ 流水金额，差额在流水详情页单独标注「未分摊」（如 100 元流水仅分摊 30 + 20，剩余 ¥50 为未分摊）；</li>
+      <li>新建物品时可直接生成一条关联支出流水（分摊金额 = 本体价），也可事后关联已有流水；</li>
+      <li>购买配件 = 一条支出流水（分摊指向该物品）+ 在 <code>item_accessories</code> 增加一批库存；</li>
+      <li>数据一致性：成本指标由「物品本体价 + 配件表」直接计算（不重复累加流水），流水仅用于展示与对账，避免双重计数。</li>
+    </ul>
+
+    <h3>8.3 家庭与数据域（个人 / 家庭）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:150px">能力</th><th style="width:110px">Owner（创建者）</th><th style="width:110px">Member（成员）</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>查看家庭账本 / 物品</td><td>✅</td><td>✅</td><td>成员对家庭数据域全量可见</td></tr>
+          <tr><td>记家庭账 / 建家庭物品</td><td>✅</td><td>✅</td><td>记录人写入 <code>created_by</code> 可追溯</td></tr>
+          <tr><td>编辑他人记录</td><td>✅</td><td>✅</td><td>家庭账本协作优先（v1.0 简化模型）</td></tr>
+          <tr><td>生成邀请码</td><td>✅</td><td>❌</td><td>仅创建者</td></tr>
+          <tr><td>移除成员 / 解散家庭</td><td>✅</td><td>❌</td><td>Owner 专属</td></tr>
+          <tr><td>退出家庭</td><td>—</td><td>✅</td><td>退出后历史记录保留（created_by 仍指向本人）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li><strong>数据域切换：</strong>顶部提供「个人 | 家庭」分段控件；记账 / 建物品时默认沿用上次选择，可在表单内随时切换归属；</li>
+      <li><strong>邀请码规则：</strong>8 位大写字母数字（排除易混淆字符 0/O/1/I），默认 72 小时有效、最多 5 次使用；哈希存储，过期或超额自动失效；</li>
+      <li><strong>家庭×个人数据隔离：</strong>个人流水永远不会出现在家庭视图中（除非用户主动「重新归属」，该操作记入审计日志）。</li>
+    </ul>
+
+    <h3>8.4 趋势看板</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:150px">指标</th><th style="width:270px">定义</th><th>可视化</th></tr></thead>
+        <tbody>
+          <tr><td>消费金额</td><td>区间内 <code>type=expense</code> 求和</td><td>折线 / 柱状趋势（日 / 周 / 月粒度），可叠加分类堆叠</td></tr>
+          <tr><td>储蓄额度</td><td>区间内 收入 − 支出（净结余）</td><td>面积折线 + 目标线；按月对比柱状</td></tr>
+          <tr><td>收益</td><td>分类带 <code>system_tag=investment_return</code> 的收入 + 自动结息流水（<code>system_tag=interest</code>，见 8.5）合计</td><td>独立折线 + 累计收益曲线</td></tr>
+          <tr><td>资产净值</td><td>Σ 全部账户余额（沿时间回溯）</td><td>净值曲线（资产 vs 负债双线）</td></tr>
+          <tr><td>分类占比</td><td>区间内按分类聚合</td><td>环形图 + Top10 排行</td></tr>
+          <tr><td>同比 / 环比</td><td>与上一周期对比</td><td>涨跌徽章 + 差值标注</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul>
+      <li>看板同时支持「个人 / 家庭」数据域与「全部 / 单账户」筛选；</li>
+      <li>查询按 <code>(owner, 时间段)</code> 聚合，MySQL 窗口函数实现月环比；结果在 Redis 缓存 60 秒（记账操作触发失效）；</li>
+      <li>默认展示近 12 个月；移动端图表支持双指缩放（ECharts dataZoom）。</li>
+    </ul>
+
+    <h3>8.5 账户利息自动计算 <span class="tag tag-info">增强</span></h3>
+    <p>储蓄 / 理财类账户可配置年化利率，系统<strong>按日计息、周期性入账</strong>，自动生成利息收入流水，无需手工记账。</p>
+
+    <h4>账户计息配置（accounts 表，见 5.2）</h4>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:190px">字段</th><th style="width:200px">取值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td><code>interest_rate_bp</code></td><td>INT，如 175 = 1.75%</td><td>年化利率（基点，1bp = 0.01%）；<code>NULL</code> = 不计息</td></tr>
+          <tr><td><code>interest_freq</code></td><td>monthly / quarterly / yearly</td><td>结息周期，默认 monthly（每月入账一次）</td></tr>
+          <tr><td><code>interest_posted_at</code></td><td>DATE</td><td>上次结息日，同时作为幂等标记（见下）</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>计息公式（单利 · 按日累计）</h4>
+    <div class="formula">
+利息 = Σ(每日余额 × 年化利率 ÷ 365)　<span class="cm">// 周期内逐日累加</span><br>
+<span class="cm">余额口径与 8.1 一致（由流水实时派生）；结息入账后，新余额从次日起参与计息</span>
+    </div>
+
+    <h4>入账与幂等防重</h4>
+    <ul>
+      <li>每日 <code>@Cron</code> 扫描已配置账户：当 <code>today ≥ interest_posted_at + 结息周期</code> 时，计算该周期利息并写入一条 <code>type=income</code> 流水（系统分类「利息收益」、<code>system_tag=interest</code>、归属该账户）；</li>
+      <li><strong>幂等：</strong>入账成功后将 <code>interest_posted_at</code> 推进至结息日；任务重跑 / 服务重启后先校验该字段，同一周期绝不重复入账；</li>
+      <li><strong>手动结息：</strong><code>POST /accounts/:id/interest/run</code> 支持随时预览并确认入账（按实际天数计息），与自动结息共用同一计算服务，口径一致；</li>
+      <li><strong>口径说明：</strong>v1.0 采用单利（不计复利）；利率变更从下一计息区间起生效；利息流水在趋势看板「收益」指标中独立呈现（见 8.4）。</li>
+    </ul>
+  </section>
+
+  <!-- ======================= 9. UI/UX ======================= -->
+  <section id="s9">
+    <h2><span class="no">09</span>UI/UX 与响应式设计</h2>
+
+    <h3>9.1 断点策略</h3>
+    <div class="bp-bar">
+      <div style="flex:0 0 16%"><b>≤ 639px</b>手机<br>360–639</div>
+      <div style="flex:0 0 22%"><b>640–1023px</b>大手机 / 竖屏平板<br>底部 Tab + 双列卡片</div>
+      <div style="flex:0 0 27%"><b>1024–1535px</b>平板横屏 / 笔记本<br>侧边栏 + 三列</div>
+      <div style="flex:0 0 35%"><b>≥ 1536px</b>桌面宽屏<br>侧边栏 + 内容区居中限宽 1200px</div>
+    </div>
+    <ul>
+      <li><strong>导航形态：</strong>手机上「底部 5 Tab（首页 / 流水 / 记一笔 / 物品 / 我的）」+ 右下悬浮记账按钮；≥1024px 切换为「左侧固定侧边栏」，底部 Tab 隐藏；</li>
+      <li><strong>表格 / 列表：</strong>手机上流水为卡片列表（金额右对齐、分类色点），桌面自动升级为表格式列表，同一组件双形态渲染；</li>
+      <li><strong>表单：</strong>手机端金额输入使用自定义数字键盘（大按键、防误触），桌面端直接键盘输入；</li>
+      <li><strong>触控规范：</strong>所有可点元素命中区 ≥ 44×44px；关键操作（删除 / 关闭 MFA）二次确认。</li>
+    </ul>
+
+    <h3>9.2 关键页面线框</h3>
+    <div class="fig">
+      <div class="wf">
+        <!-- 手机：记账页 -->
+        <div class="wf-phone">
+          <div class="ph-top">375 × 812 · 记账</div>
+          <div class="ph-body">
+            <div class="blk" style="justify-content:space-between;padding:8px 10px">‹ 返回　记一笔　　✓ 保存</div>
+            <div class="wf-row" style="grid-template-columns:1fr 1fr 1fr">
+              <div class="blk blk-p">支出</div>
+              <div class="blk">收入</div>
+              <div class="blk">转账</div>
+            </div>
+            <div class="blk tall" style="font-size:22px;color:#1f2937;font-weight:700">¥ 240<span style="font-size:12px;color:#9ca3af">.00</span></div>
+            <div class="blk" style="justify-content:space-between;padding:8px 10px"><span>归属：🏠 我的家庭 ▾</span><span>👤 个人</span></div>
+            <div class="blk" style="justify-content:space-between;padding:8px 10px"><span>分类：日用百货</span><span style="color:#4f46e5">更换 ›</span></div>
+            <div class="blk" style="justify-content:space-between;padding:8px 10px"><span>🔗 关联物品 2 个 · 分摊 ¥30 + ¥20</span><span style="color:#4f46e5">更换 ›</span></div>
+            <div class="blk">备注：双十一囤 12 个替换刷头</div>
+          </div>
+          <div class="ph-tab"><span>首页</span><span>流水</span><span class="on">＋ 记一笔</span><span>物品</span><span>我的</span></div>
+        </div>
+        <!-- 手机：物品卡片 -->
+        <div class="wf-phone">
+          <div class="ph-top">375 × 812 · 物品详情</div>
+          <div class="ph-body">
+            <div class="blk" style="justify-content:space-between;padding:8px 10px">‹ 返回　电动牙刷　　⋯</div>
+            <div class="blk tall" style="flex-direction:column;gap:4px">
+              <span style="font-size:11px;color:#6b7280">日均持有成本</span>
+              <span style="font-size:24px;font-weight:800;color:#4f46e5">¥4.40<span style="font-size:11px;color:#9ca3af">/天</span></span>
+              <span style="font-size:10.5px;color:#9ca3af">持有 100 天 · 自 2026-06-11</span>
+            </div>
+            <div class="wf-row" style="grid-template-columns:1fr 1fr">
+              <div class="blk blk-o">总支付 ¥640.00</div>
+              <div class="blk">当前持有 ¥440.00</div>
+            </div>
+            <div class="blk" style="flex-direction:column;gap:4px;padding:10px">
+              <span style="align-self:flex-start;font-weight:700;color:#374151">配件：替换刷头</span>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-start">
+                <span style="width:14px;height:14px;border-radius:4px;background:#4f46e5;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#4f46e5;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+                <span style="width:14px;height:14px;border-radius:4px;background:#e5e7eb;display:inline-block"></span>
+              </div>
+              <span style="align-self:flex-start;font-size:10.5px;color:#6b7280">已用 2 / 12 · 剩余价值 ¥200.00</span>
+            </div>
+            <div class="blk" style="justify-content:space-between;padding:8px 10px"><span>使用一个刷头</span><span>-1</span></div>
+            <div class="blk tall">成本演进折线图（累计 ¥ 台阶上升）</div>
+          </div>
+          <div class="ph-tab"><span>首页</span><span>流水</span><span>＋ 记一笔</span><span class="on">物品</span><span>我的</span></div>
+        </div>
+        <!-- 桌面：看板 -->
+        <div class="wf-desk">
+          <div class="dk-top"><i></i><i></i><i></i></div>
+          <div class="dk-body">
+            <div class="dk-side">
+              <span class="on">📊 看板</span><span>🧾 流水</span><span>📦 物品</span><span>🏠 家庭</span><span>⚙️ 设置</span>
+            </div>
+            <div class="dk-main">
+              <div class="wf-row" style="grid-template-columns:1fr 1fr 1fr 1fr">
+                <div class="blk blk-p" style="flex-direction:column"><b>本月消费</b>¥3,240</div>
+                <div class="blk blk-g" style="flex-direction:column"><b>本月储蓄</b>¥5,100</div>
+                <div class="blk blk-o" style="flex-direction:column"><b>收益</b>¥320</div>
+                <div class="blk" style="flex-direction:column"><b>净资产</b>¥86,400</div>
+              </div>
+              <div class="wf-row" style="grid-template-columns:2fr 1fr">
+                <div class="blk tall" style="min-height:110px">消费 / 储蓄趋势折线（月粒度 · 可切日/周）</div>
+                <div class="blk tall" style="min-height:110px">分类占比环形图</div>
+              </div>
+              <div class="wf-row" style="grid-template-columns:1fr 1fr">
+                <div class="blk" style="min-height:60px">物品总投入 · 成本排行 Top5</div>
+                <div class="blk" style="min-height:60px">近期流水（表格形态）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="cap">图 9-1 移动端记账页 / 物品详情页 · 桌面端看板页 线框</div>
+    </div>
+
+    <h3>9.3 交互与体验要点</h3>
+    <ul>
+      <li><strong>3 步记一笔：</strong>金额 → 分类 → 保存，其余字段（账户 / 时间 / 备注 / 物品 / 归属）均有智能默认值；一笔流水可关联多个物品并逐个分配金额，未分配部分自动标注「未分摊」；</li>
+      <li><strong>物品成本的两级展示：</strong>列表卡片移动端精简显示（至少 总支付 + 日均持有成本）；<strong>点击进入详情页后完整展示核心三指标</strong>（总支付 / 当前持有成本 / 日均持有成本）+ 剩余配件价值 + 成本演进图，任何屏幕尺寸下信息不缺失；</li>
+      <li><strong>乐观更新：</strong>保存后列表与看板立即更新（后台重算），弱网下有明确的"同步中"状态；</li>
+      <li><strong>空状态引导：</strong>新用户首登向导：建第一个账户 → 设分类 → 记第一笔 → 开启 MFA；</li>
+      <li><strong>MFA 绑定引导：</strong>展示二维码 + 备用密钥文本 + 恢复码下载（PDF / 复制），完成后打勾确认；</li>
+      <li><strong>无障碍：</strong>颜色对比度 ≥ 4.5:1；所有表单可键盘操作；图表提供表格替代视图；</li>
+      <li><strong>深色模式：</strong>CSS 变量驱动，跟随系统偏好（v1.1 候选，Token 层已预留）。</li>
+    </ul>
+
+    <h3>9.4 前端性能预算</h3>
+    <div class="grid g4">
+      <div class="cell kpi"><div class="v">≤200KB</div><div class="l">首屏 JS（gzip）</div></div>
+      <div class="cell kpi"><div class="v">&lt;3s</div><div class="l">4G 首屏可交互</div></div>
+      <div class="cell kpi"><div class="v">≥55FPS</div><div class="l">列表滚动帧率</div></div>
+      <div class="cell kpi"><div class="v">≤5</div><div class="l">首屏请求数（关键路径）</div></div>
+    </div>
+    <ul>
+      <li>路由级代码分割；ECharts 仅在进入看板时动态加载；</li>
+      <li>长列表虚拟滚动（流水超过 200 条时启用）；</li>
+      <li>静态资源指纹 + Nginx 一年期 immutable 缓存；index.html 不缓存；</li>
+      <li>接口响应 gzip；看板接口字段裁剪（只传渲染所需）。</li>
+    </ul>
+  </section>
+
+  <!-- ======================= 10. Docker ======================= -->
+  <section id="s10">
+    <h2><span class="no">10</span>Docker 容器化部署</h2>
+
+    <h3>10.1 容器拓扑</h3>
+    <div class="fig">
+      <svg viewBox="0 0 900 380" role="img" aria-label="Docker Compose 部署拓扑">
+        <rect x="30" y="20" width="840" height="340" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="7 5"/>
+        <text x="52" y="48" font-size="13" font-weight="700" fill="#334155">Docker Engine · 单机</text>
+        <text x="52" y="66" font-size="11" fill="#64748b">docker compose up -d 一键启动</text>
+        <!-- 外部用户 -->
+        <rect x="46" y="100" width="120" height="52" rx="9" fill="#eef2ff" stroke="#c7d2fe"/>
+        <text x="106" y="122" font-size="12" font-weight="700" fill="#3730a3" text-anchor="middle">浏览器</text>
+        <text x="106" y="139" font-size="10.5" fill="#6366f1" text-anchor="middle">手机 / 平板 / 电脑</text>
+        <line x1="166" y1="126" x2="190" y2="126" stroke="#94a3b8" stroke-width="2"/>
+        <text x="178" y="84" font-size="10" fill="#64748b" text-anchor="middle">HTTPS</text>
+        <!-- 外部反向代理（容器外，用户自备） -->
+        <rect x="194" y="88" width="130" height="78" rx="10" fill="#fef3c7" stroke="#fcd34d" stroke-width="1.5"/>
+        <text x="259" y="112" font-size="12" font-weight="700" fill="#92400e" text-anchor="middle">外部反向代理</text>
+        <text x="259" y="130" font-size="10" fill="#b45309" text-anchor="middle">用户自备 · TLS 终止</text>
+        <text x="259" y="148" font-size="10" fill="#b45309" text-anchor="middle">透传 X-Forwarded-*</text>
+        <line x1="324" y1="126" x2="348" y2="126" stroke="#94a3b8" stroke-width="2"/>
+        <text x="336" y="84" font-size="10" fill="#64748b" text-anchor="middle">HTTP :80</text>
+        <!-- web -->
+        <rect x="352" y="88" width="148" height="78" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
+        <text x="426" y="112" font-size="12.5" font-weight="700" fill="#155e75" text-anchor="middle">web · nginx:alpine</text>
+        <text x="426" y="130" font-size="10" fill="#0e7490" text-anchor="middle">前端静态产物 + 反代</text>
+        <text x="426" y="148" font-size="10" fill="#0e7490" text-anchor="middle">仅发布 :80 / :443</text>
+        <line x1="500" y1="126" x2="524" y2="126" stroke="#94a3b8" stroke-width="2"/>
+        <text x="512" y="84" font-size="10" fill="#64748b" text-anchor="middle">backend 网络</text>
+        <!-- api -->
+        <rect x="528" y="88" width="148" height="78" rx="10" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+        <text x="602" y="112" font-size="12.5" font-weight="700" fill="#5b21b6" text-anchor="middle">api · node:24-alpine</text>
+        <text x="602" y="130" font-size="10" fill="#7c3aed" text-anchor="middle">NestJS + Prisma</text>
+        <text x="602" y="148" font-size="10" fill="#7c3aed" text-anchor="middle">启动时自动执行迁移</text>
+        <!-- 健康检查标注 -->
+        <text x="602" y="184" font-size="10" fill="#94a3b8" text-anchor="middle">healthcheck: /api/v1/health</text>
+        <!-- mysql -->
+        <rect x="352" y="240" width="148" height="78" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="426" y="266" font-size="12" font-weight="700" fill="#1f2937" text-anchor="middle">mysql · mysql:8.4</text>
+        <text x="426" y="284" font-size="10" fill="#64748b" text-anchor="middle">数据卷 mysql_data</text>
+        <text x="426" y="302" font-size="10" fill="#64748b" text-anchor="middle">不映射宿主机端口</text>
+        <!-- redis -->
+        <rect x="528" y="240" width="148" height="78" rx="10" fill="#fff" stroke="#cbd5e1" stroke-width="1.5"/>
+        <text x="602" y="266" font-size="12" font-weight="700" fill="#1f2937" text-anchor="middle">redis · redis:7-alpine</text>
+        <text x="602" y="284" font-size="10" fill="#64748b" text-anchor="middle">数据卷 redis_data（AOF）</text>
+        <text x="602" y="302" font-size="10" fill="#64748b" text-anchor="middle">限流 / 缓存 / 吊销名单</text>
+        <line x1="602" y1="166" x2="602" y2="240" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4"/>
+        <path d="M528,166 L514,166 L514,279 L500,279" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-dasharray="5 4"/>
+        <!-- 备份 -->
+        <rect x="700" y="240" width="150" height="78" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.5"/>
+        <text x="775" y="266" font-size="12" font-weight="700" fill="#92400e" text-anchor="middle">备份脚本（可选）</text>
+        <text x="775" y="284" font-size="10.5" fill="#b45309" text-anchor="middle">mysqldump 每日 cron</text>
+        <text x="775" y="302" font-size="10.5" fill="#b45309" text-anchor="middle">加密后落盘 + 保留 30 天</text>
+      </svg>
+      <div class="cap">图 10-1 Compose 服务拓扑：外部反向代理（自备）+ 4 个常驻服务 + 1 个可选备份任务</div>
+    </div>
+
+    <h3>10.2 docker-compose.yml（生产草案）</h3>
+    <pre class="code"><span class="k">services</span>:
+  <span class="f">web</span>:                        <span class="c"># 前端 + 反代</span>
+    <span class="k">build</span>: { <span class="k">context</span>: ./apps/web, <span class="k">target</span>: prod }   <span class="c"># 多阶段：node build → nginx</span>
+    <span class="k">ports</span>: [<span class="s">"80:80"</span>, <span class="s">"443:443"</span>]   <span class="c"># 供外部反向代理回源</span>
+    <span class="k">networks</span>: [<span class="s">frontend, backend</span>]
+    <span class="k">depends_on</span>: [api]
+    <span class="k">restart</span>: unless-stopped
+
+  <span class="f">api</span>:
+    <span class="k">build</span>: { <span class="k">context</span>: ./apps/api }
+    <span class="k">env_file</span>: .env
+    <span class="k">environment</span>:
+      - <span class="s">NODE_ENV=production</span>
+      - <span class="s">DATABASE_URL=mysql://itemlife:${DB_PASSWORD}@mysql:3306/itemlife</span>
+      - <span class="s">REDIS_URL=redis://redis:6379</span>
+    <span class="k">networks</span>: [<span class="s">backend</span>]
+    <span class="k">depends_on</span>:
+      <span class="f">mysql</span>: { <span class="k">condition</span>: service_healthy }
+      <span class="f">redis</span>: { <span class="k">condition</span>: service_healthy }
+    <span class="k">healthcheck</span>:
+      <span class="k">test</span>: [<span class="s">"CMD"</span>, <span class="s">"wget"</span>, <span class="s">"-qO-"</span>, <span class="s">"http://localhost:3000/api/v1/health"</span>]
+      <span class="k">interval</span>: 15s
+      <span class="k">retries</span>: 5
+    <span class="k">restart</span>: unless-stopped
+
+  <span class="f">mysql</span>:
+    <span class="k">image</span>: mysql:8.4
+    <span class="k">command</span>: <span class="s">--character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci --default-time-zone=+00:00</span>
+    <span class="k">environment</span>:
+      - <span class="s">MYSQL_DATABASE=itemlife</span>
+      - <span class="s">MYSQL_USER=itemlife</span>
+      - <span class="s">MYSQL_PASSWORD=${DB_PASSWORD}</span>
+      - <span class="s">MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}</span>
+    <span class="k">volumes</span>: [<span class="s">"mysql_data:/var/lib/mysql"</span>]
+    <span class="k">networks</span>: [<span class="s">backend</span>]
+    <span class="k">healthcheck</span>:
+      <span class="k">test</span>: [<span class="s">"CMD"</span>, <span class="s">"mysqladmin"</span>, <span class="s">"ping"</span>, <span class="s">"-h"</span>, <span class="s">"localhost"</span>]
+      <span class="k">interval</span>: 10s
+      <span class="k">retries</span>: 10
+    <span class="k">restart</span>: unless-stopped
+
+  <span class="f">redis</span>:
+    <span class="k">image</span>: redis:7-alpine
+    <span class="k">command</span>: <span class="s">redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}</span>
+    <span class="k">volumes</span>: [<span class="s">"redis_data:/data"</span>]
+    <span class="k">networks</span>: [<span class="s">backend</span>]
+    <span class="k">healthcheck</span>:
+      <span class="k">test</span>: [<span class="s">"CMD"</span>, <span class="s">"redis-cli"</span>, <span class="s">"-a"</span>, <span class="s">"${REDIS_PASSWORD}"</span>, <span class="s">"ping"</span>]
+      <span class="k">interval</span>: 10s
+    <span class="k">restart</span>: unless-stopped
+
+<span class="k">volumes</span>:
+  <span class="f">mysql_data</span>:
+  <span class="f">redis_data</span>:
+  <span class="f">uploads</span>:            <span class="c"># 物品图片等用户上传文件</span>
+
+<span class="k">networks</span>:
+  <span class="f">frontend</span>:              <span class="c"># 仅 web：发布 80/443，承接外部反代回源</span>
+    <span class="k">driver</span>: bridge
+  <span class="f">backend</span>:               <span class="c"># web / api / mysql / redis：内部互通，不出外网</span>
+    <span class="k">driver</span>: bridge
+    <span class="k">internal</span>: <span class="s">true</span>
+</pre>
+    <p style="font-size:13px;color:var(--c-text-3)">MySQL 与 Redis 仅在 <code>backend</code> 网络可达、不映射宿主机端口；宿主机只发布 web 的 80/443，由你自备的外部反向代理回源（详见 10.3 网络设计与 10.5 对接方案）。</p>
+
+    <h3>10.3 Compose 网络设计 <span class="tag tag-info">回答你的问题</span></h3>
+    <p><strong>是的——同一个 compose 文件中的所有服务，默认会自动加入同一条以项目名命名的桥接网络 <code>&lt;项目名&gt;_default</code></strong>（本项目即 <code>itemlife_default</code>），相当于自动组建了一个内部局域网：</p>
+    <ul>
+      <li><strong>服务名即 DNS：</strong>容器之间直接用服务名互访（<code>mysql:3306</code>、<code>redis:6379</code>、<code>api:3000</code>），无需关心容器 IP——本方案的 <code>DATABASE_URL</code> / <code>REDIS_URL</code> 正是这么写的；</li>
+      <li><strong>默认隔离：</strong>该网络只存在于本项目内，与宿主机上其它 Docker 项目互不相通；<code>ports</code> 未声明的端口只在该网络内可见，外部无法直连；</li>
+      <li><strong>出网行为：</strong>默认 bridge 网络允许容器访问外网；可加 <code>internal: true</code> 完全切断出网。</li>
+    </ul>
+    <p><strong>本项目的做法（不依赖默认网络，显式声明两层分段）：</strong><code>frontend</code>（仅 web，承接外部反向代理回源）与 <code>backend</code>（web / api / mysql / redis 四者互通，见 10.2 底部 networks 段）：</p>
+    <ul>
+      <li><code>backend</code> 设置 <code>internal: true</code>——mysql / redis / api 无法主动访问外网，数据面攻击面最小；</li>
+      <li>web 同时挂在两条网络上：对外发布端口走 <code>frontend</code>，与 api 通信走 <code>backend</code>；</li>
+      <li>由于网络按项目隔离，未来同机部署多个环境（dev / prod）也不会互相串通。</li>
+    </ul>
+
+    <h3>10.4 启动与初始化流程</h3>
+    <ol>
+      <li>目标机器安装 Docker Engine + Compose 插件（Windows / macOS 用 Docker Desktop，Linux 用发行版包）；</li>
+      <li>复制 <code>.env.example → .env</code>，填写数据库口令、JWT 密钥、AES 密钥（脚本 <code>make gen-secrets</code> 可自动生成随机值）；</li>
+      <li><code>docker compose up -d --build</code> → 拉取基础镜像、构建 web/api、启动 4 个服务；</li>
+      <li>api 容器 entrypoint：等待 MySQL 健康 → <code>prisma migrate deploy</code> 建表 → 写入预置分类种子数据 → 启动服务；</li>
+      <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，按引导开启 MFA。</li>
+    </ol>
+
+    <h3>10.5 内网部署与外部反向代理对接 <span class="tag tag-info">已确认</span></h3>
+    <p>部署形态已确认：<strong>本系统在内网以 Compose 运行，公网访问由容器外部你自备的路由 / 反向代理提供</strong>。完整链路：公网用户 → 你的反向代理（TLS 终止）→ 宿主机 <code>:80</code> → web 容器（nginx）→ backend 网络 → api 容器。</p>
+    <div class="grid g2">
+      <div class="cell">
+        <h5>外部代理侧（你配置）</h5>
+        <ul>
+          <li>将公网域名路由回源到本机 <code>:80</code>（如以 HTTPS 回源可保留 <code>:443</code>）；</li>
+          <li>透传请求头：<code>X-Forwarded-Proto</code>、<code>X-Forwarded-For</code>（或 <code>X-Real-IP</code>）、<code>X-Forwarded-Host</code>，并保留 <code>Host</code>；</li>
+          <li>HSTS 与证书续期由外层代理统一负责；如路径经过 CDN / WAF，注意放行 Cookie 与 Authorization 头。</li>
+        </ul>
+      </div>
+      <div class="cell">
+        <h5>应用侧（已内置适配）</h5>
+        <ul>
+          <li>API 开启 <code>trust proxy</code>——限流与审计按<strong>真实客户端 IP</strong> 计数，而非代理 IP；</li>
+          <li>Cookie 的 <code>Secure</code> 依据 <code>X-Forwarded-Proto</code> 动态设置：经公网 HTTPS 访问自动 Secure，内网 HTTP 直连可降级，两种方式都能正常登录；</li>
+          <li>HSTS 不在内层重复下发，避免内网直连被强制跳转 HTTPS。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="box box-ok">
+      <p><b>内网直连（可选）：</b>不经外部代理、在内网直接访问 <code>http://&lt;主机IP&gt;/</code> 同样可用（Cookie 自动降级为非 Secure）；安全要求高时建议在外部代理或内网入口统一提供 HTTPS。</p>
+    </div>
+
+    <h3>10.6 数据持久化与备份</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:170px">对象</th><th style="width:190px">方式</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>MySQL 数据</td><td>命名卷 <code>mysql_data</code></td><td>容器重建不丢数据；升级镜像前先做一次逻辑备份</td></tr>
+          <tr><td>Redis 数据</td><td>命名卷 <code>redis_data</code> + AOF</td><td>限流 / 缓存数据可重建，持久化仅为平滑重启</td></tr>
+          <tr><td>用户上传</td><td>命名卷 <code>uploads</code></td><td>物品图片，挂载到 api 容器指定目录</td></tr>
+          <tr><td>定时备份（可选）</td><td>cron 容器 / 宿主机 crontab</td><td><code>mysqldump --single-transaction</code> → gzip → AES 加密 → 保留 30 天；恢复演练纳入运维手册</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>10.7 开发模式</h3>
+    <pre class="code"><span class="c"># docker-compose.dev.yml（叠加文件）</span>
+<span class="f">services</span>:
+  <span class="f">api</span>:
+    <span class="k">command</span>: <span class="s">pnpm start:dev</span>          <span class="c"># 热重载</span>
+    <span class="k">volumes</span>: [<span class="s">"./apps/api/src:/app/src"</span>]
+    <span class="k">ports</span>: [<span class="s">"3000:3000"</span>]           <span class="c"># 方便直连调试 / Swagger</span>
+  <span class="f">web</span>:
+    <span class="k">image</span>: node:24-alpine
+    <span class="k">command</span>: <span class="s">pnpm dev --host</span>       <span class="c"># Vite Dev Server</span>
+    <span class="k">ports</span>: [<span class="s">"5173:5173"</span>]
+  <span class="f">mysql</span>:
+    <span class="k">ports</span>: [<span class="s">"3306:3306"</span>]           <span class="c"># 仅开发暴露，便于用客户端连库排查</span>
+<span class="c"># 使用：docker compose -f docker-compose.yml -f docker-compose.dev.yml up</span>
+</pre>
+  </section>
+
+  <!-- ======================= 11. 目录结构 ======================= -->
+  <section id="s11">
+    <h2><span class="no">11</span>工程目录结构</h2>
+    <pre class="code">itemlife/
+├── docker-compose.yml            <span class="c"># 生产编排</span>
+├── docker-compose.dev.yml        <span class="c"># 开发叠加（热重载）</span>
+├── .env.example                  <span class="c"># 环境变量样例（真实 .env 不入库）</span>
+├── Makefile                      <span class="c"># make up / down / backup / gen-secrets</span>
+├── docs/
+│   └── design-report.html        <span class="c"># 本设计报告</span>
+├── packages/
+│   └── shared/                   <span class="c"># 前后端共享：DTO 类型、常量、金额工具</span>
+│       └── src/{types,constants,money}.ts
+└── apps/
+    ├── web/                      <span class="c"># ── 前端 Vue 3 ──</span>
+    │   ├── Dockerfile            <span class="c"># 多阶段：build → nginx</span>
+    │   ├── nginx.conf            <span class="c"># SPA 回退 + /api 反代 + 缓存头 + CSP</span>
+    │   └── src/
+    │       ├── api/              <span class="c"># axios 实例 + 各模块接口封装</span>
+    │       ├── stores/           <span class="c"># Pinia：auth / domain(个人|家庭) / ui</span>
+    │       ├── composables/      <span class="c"># useMoney / useBreakpoint / useQuery 封装</span>
+    │       ├── components/       <span class="c"># 通用组件（MoneyInput / DomainSwitch / Chart）</span>
+    │       ├── views/
+    │       │   ├── auth/         <span class="c"># 登录 / 注册 / MFA 绑定与验证</span>
+    │       │   ├── ledger/       <span class="c"># 流水 / 记一笔 / 账户 / 分类管理</span>
+    │       │   ├── items/        <span class="c"># 物品列表 / 详情 / 看板</span>
+    │       │   ├── family/       <span class="c"># 家庭管理 / 邀请码</span>
+    │       │   ├── dashboard/    <span class="c"># 趋势看板</span>
+    │       │   └── settings/     <span class="c"># 设置 / 安全中心</span>
+    │       ├── router/           <span class="c"># 路由 + 登录/ MFA 守卫</span>
+    │       └── styles/           <span class="c"># Tailwind 入口 + 设计 Token</span>
+    └── api/                      <span class="c"># ── 后端 NestJS ──</span>
+        ├── Dockerfile
+        ├── prisma/
+        │   ├── schema.prisma     <span class="c"># 数据模型（第 5 章的落地）</span>
+        │   ├── migrations/       <span class="c"># 迁移历史</span>
+        │   └── seed.ts           <span class="c"># 预置分类种子</span>
+        └── src/
+            ├── modules/
+            │   ├── auth/         <span class="c"># 注册登录 / TOTP / 令牌 / 限流</span>
+            │   ├── ledger/       <span class="c"># 账户 / 分类 / 流水</span>
+            │   ├── item/         <span class="c"># 物品 / 配件 / 成本计算</span>
+            │   ├── family/       <span class="c"># 家庭 / 邀请码 / 成员</span>
+            │   ├── dashboard/    <span class="c"># 趋势聚合查询</span>
+            │   └── user/         <span class="c"># 个人资料 / 偏好</span>
+            ├── common/
+            │   ├── guards/       <span class="c"># JwtGuard / MfaGuard / OwnerGuard</span>
+            │   ├── crypto/       <span class="c"># argon2 / aes-gcm / sha256 封装</span>
+            │   └── interceptors/ <span class="c"># 响应包络 / 审计日志</span>
+            └── main.ts
+</pre>
+  </section>
+
+  <!-- ======================= 12. 里程碑 ======================= -->
+  <section id="s12">
+    <h2><span class="no">12</span>开发里程碑</h2>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:90px">阶段</th><th style="width:190px">交付内容</th><th>验收标准</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>M1</strong><br>骨架 + 认证</td>
+            <td>Compose 骨架跑通（web/api/mysql/redis）；注册登录 + TOTP MFA + 恢复码；响应式框架与导航壳</td>
+            <td>手机 / 桌面浏览器可完成「注册 → 绑 MFA → 登出 → 两段式登录」全流程；凭据全部按第 7 章形态落库（可用 SQL 抽查验证无明文）</td>
+          </tr>
+          <tr>
+            <td><strong>M2</strong><br>记账核心</td>
+            <td>账户管理（含利息配置）、分类管理（设置菜单）、记一笔（收 / 支 / 转账 + 多物品分摊关联）、流水列表与筛选、余额汇总、账户利息自动结息</td>
+            <td>转账后两账户余额正确联动；删除流水后余额回滚；分类增删改排序在移动端可用；利息结息重跑不重复入账（幂等）</td>
+          </tr>
+          <tr>
+            <td><strong>M3</strong><br>物品与配件</td>
+            <td>物品档案、配件库存（使用 / 撤销）、成本指标体系（三核心 + 两辅助）、记账多物品分摊关联、物品看板</td>
+            <td>录入「牙刷 + 12 刷头用 2 个」用例后，总支付 / 当前持有成本 / 日均持有成本与第 8.2 节公式完全一致；配件消耗有审计记录</td>
+          </tr>
+          <tr>
+            <td><strong>M4</strong><br>家庭协作</td>
+            <td>创建家庭、邀请码生成 / 加入 / 失效、成员管理、个人 / 家庭数据域切换</td>
+            <td>两账号可组成家庭并共享账本与物品；个人数据在家庭视图不可见；邀请码过期后无法使用</td>
+          </tr>
+          <tr>
+            <td><strong>M5</strong><br>看板</td>
+            <td>消费 / 储蓄 / 收益（含自动结息）/ 净值趋势、分类占比、同环比、物品投入统计</td>
+            <td>看板数字与流水手工核算一致；三档设备上图表可读、交互流畅</td>
+          </tr>
+          <tr>
+            <td><strong>M6</strong><br>加固与交付</td>
+            <td>安全复查（限流 / 审计 / 越权专项测试）、E2E 多视口回归、备份脚本、部署文档</td>
+            <td>Playwright 在 375 / 768 / 1440 视口全绿；新机器按文档 30 分钟内完成部署上线</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13px;color:var(--c-text-3)">每个里程碑结束出可运行的容器镜像（docker compose 可拉起），便于阶段性验收。</p>
+  </section>
+
+  <!-- ======================= 13. 风险与待确认 ======================= -->
+  <section id="s13">
+    <h2><span class="no">13</span>风险与决策记录</h2>
+
+    <h3>13.1 关键决策记录（Q1–Q6 已全部确认）</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:60px">编号</th><th style="width:260px">问题</th><th>已确认结论（均已落实到对应章节）</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Q1</strong></td>
+            <td><strong>物品「两种价格」的确切口径</strong>（需求原话：「一个是总的支付金额，另一个是物品+两个刷头的价格/物品持有日期」）</td>
+            <td><span class="tag tag-rec">已确认</span> 按默认解读落地：① 总支付 = 物品 + 全部配件（¥640）；② 当前持有成本 = 物品 + 已用配件（¥440）；③ 日均持有成本 = ② ÷ 持有天数（¥4.40/天）。核心三指标固定展示，移动端列表可精简、详情页必须完整；公式封装 CostService 参数化（详见 8.2）</td>
+          </tr>
+          <tr>
+            <td><strong>Q2</strong></td>
+            <td>一笔流水是否可同时关联<strong>多个</strong>物品？</td>
+            <td><span class="tag tag-rec">已确认</span> 支持多物品：新增 <code>transaction_items</code> 分摊表（5.2 ⑧）——一笔流水关联 1～N 个物品并逐个指定分摊金额；单物品可省略金额（继承流水全额）；Σ分摊 ≤ 流水金额，差额在详情页标注「未分摊」（6.3 示例）</td>
+          </tr>
+          <tr>
+            <td><strong>Q3</strong></td>
+            <td>「收益」指标的范围界定？</td>
+            <td><span class="tag tag-rec">已确认</span> 收益 = 投资收益类收入 + 自动结息利息流水（8.4）；并新增「账户利息自动计算」：单利按日计息、周期入账、<code>interest_posted_at</code> 幂等防重、支持手动结息（8.5 / FR-17）</td>
+          </tr>
+          <tr>
+            <td><strong>Q4</strong></td>
+            <td>注册是否需要<strong>邮箱真实验证</strong>（发验证邮件）？</td>
+            <td><span class="tag tag-rec">已确认</span> 不需要：v1.0 不引入 SMTP 依赖，注册后直接可用并引导开启 MFA（绑定页提供备用密钥与恢复码）</td>
+          </tr>
+          <tr>
+            <td><strong>Q5</strong></td>
+            <td>部署环境是<strong>公网服务器还是内网</strong>？有无域名？</td>
+            <td><span class="tag tag-rec">已确认</span> 内网部署；公网访问由你在容器外部自备路由 / 反向代理实现（10.5：透传 X-Forwarded-*、trust proxy 真实 IP 限流、Cookie Secure 动态、HSTS 外层负责）；Compose 采用 frontend / backend 双网络、backend <code>internal: true</code>（10.3）</td>
+          </tr>
+          <tr>
+            <td><strong>Q6</strong></td>
+            <td>货币范围？</td>
+            <td><span class="tag tag-rec">已确认</span> 仅人民币 CNY；预留汇率扩展：全库 <code>currency</code> 字段 + <code>exchange_rates</code> 表 + <code>CurrencyService.getRate()</code> 接口，v1.0 恒等转换、缺失汇率显式提示（5.4）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>13.2 技术风险与对策</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th style="width:250px">风险</th><th style="width:90px">等级</th><th>对策</th></tr></thead>
+        <tbody>
+          <tr><td>MySQL 中以 BINARY(16) 存 UUID 的 ORM 映射复杂度</td><td><span class="tag tag-q">中</span></td><td>Prisma 层统一封装 <code>Bytes</code> 编解码工具函数；如开发中发现摩擦过大，可降级为 <code>CHAR(36)</code>（数据量级下性能差异可忽略）</td></tr>
+          <tr><td>TOTP 依赖设备时钟，用户手机时间漂移导致验证失败</td><td><span class="tag tag-q">中</span></td><td>服务端放宽 ±1 个时间窗（±30s）；绑定页提示校准时间；提供恢复码兜底</td></tr>
+          <tr><td>用户丢失手机 + 恢复码 → 无法登录</td><td><span class="tag tag-q">中</span></td><td>文档明确恢复码保管责任；v1.1 可加「备用邮箱重置」流程</td></tr>
+          <tr><td>看板聚合查询随数据量增长的性能</td><td><span class="tag tag-ok" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0">低</span></td><td>个人 / 家庭记账量级（万级流水）MySQL 索引完全够用；预留日快照表与 Redis 缓存方案</td></tr>
+          <tr><td>单机部署无高可用</td><td><span class="tag tag-ok" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0">低</span></td><td>自托管场景接受；备份 + 快速重建即可满足 RPO</td></tr>
+          <tr><td>Tailwind + 自研组件的表单 / 日期组件开发量</td><td><span class="tag tag-q">中</span></td><td>日期 / 弹层等复杂件用 Radix Vue 无头组件补齐，避免从头造轮子</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>13.3 下一步</h3>
+    <ol>
+      <li>Q1–Q6 已全部闭环（见 13.1），无剩余阻塞项；</li>
+      <li>按第 12 章从 M1 启动实施：先搭 Compose 骨架 + 认证闭环，出可运行的第一版；</li>
+      <li>每个里程碑交付时可在本机 / 内网用 <code>docker compose up -d</code> 直接验收；公网访问按 10.5 与你的外部反向代理对接。</li>
+    </ol>
+  </section>
+
+  <!-- 参考资料 -->
+  <section id="refs">
+    <h2><span class="no">附</span>参考资料</h2>
+    <ol style="font-size:13.5px">
+      <li>OWASP Password Storage Cheat Sheet（Argon2id 参数）<br><a href="https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html" style="color:var(--c-primary)">cheatsheetseries.owasp.org/…/Password_Storage_Cheat_Sheet.html</a></li>
+      <li>RFC 6238 · TOTP: Time-Based One-Time Password Algorithm<br><a href="https://datatracker.ietf.org/doc/html/rfc6238" style="color:var(--c-primary)">datatracker.ietf.org/doc/html/rfc6238</a></li>
+      <li>Node.js 躬行记（32）—— 2FA 实战：Node 生态 TOTP 实现参考<br><a href="https://m.blog.csdn.net/iS2QJm8oQ/article/details/162236000" style="color:var(--c-primary)">m.blog.csdn.net/iS2QJm8oQ/article/details/162236000</a></li>
+      <li>双因素认证（2FA）全攻略：从原理到实践<br><a href="https://developer.baidu.com/article/detail.html?id=4105415" style="color:var(--c-primary)">developer.baidu.com/article/detail.html?id=4105415</a></li>
+      <li>PostgreSQL / MySQL 金额存储：数值类型选择（BIGINT 分 vs DECIMAL 对比参考）<br><a href="https://blog.csdn.net/lizhengyu891231/article/details/150561719" style="color:var(--c-primary)">blog.csdn.net/lizhengyu891231/article/details/150561719</a></li>
+      <li>Docker Compose 多容器编排实践（Node + MySQL + Redis + Nginx）<br><a href="https://geek-docs.com/mysql/mysql-ask-answer/619_mysql_docker_fig_compose_nginx_nodejs_mysql_redis.html" style="color:var(--c-primary)">geek-docs.com/mysql/…/docker-compose-nginx-nodejs-mysql-redis</a></li>
+      <li>React vs Vue in 2026: A Data-Driven Comparison<br><a href="https://www.pkgpulse.com/guides/react-vs-vue-2026" style="color:var(--c-primary)">pkgpulse.com/guides/react-vs-vue-2026</a></li>
+    </ol>
+    <p style="font-size:12.5px;color:var(--c-text-3);margin-top:10px">说明：本报告中的架构图、ER 图、线框图为设计示意，实现阶段以代码与 Prisma schema 为准。</p>
+  </section>
+
+  </main>
+</div>
+
+<footer>
+  <p>ItemLife · 系统设计报告 v1.0 · 2026-09-18 · 状态：待评审 · 生成者：Qoder</p>
+</footer>
+
+<button id="top-btn" title="返回顶部" aria-label="返回顶部">↑</button>
+
+<script>
+(function () {
+  // 移动端目录折叠
+  var toggle = document.getElementById('tocToggle');
+  var toc = document.getElementById('toc');
+  if (toggle && toc) {
+    toggle.addEventListener('click', function () {
+      var open = toc.classList.toggle('open');
+      toggle.classList.toggle('open', open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    toc.addEventListener('click', function (e) {
+      if (e.target.tagName === 'A' && window.innerWidth < 1024) {
+        toc.classList.remove('open');
+        toggle.classList.remove('open');
+      }
+    });
+  }
+  // 滚动高亮当前章节
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  var map = {};
+  links.forEach(function (a) {
+    var id = a.getAttribute('href').slice(1);
+    var sec = document.getElementById(id);
+    if (sec) map[id] = a;
+  });
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (en) {
+      if (en.isIntersecting) {
+        links.forEach(function (a) { a.classList.remove('active'); });
+        var a = map[en.target.id];
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+  Object.keys(map).forEach(function (id) {
+    var sec = document.getElementById(id);
+    if (sec) observer.observe(sec);
+  });
+  // 返回顶部
+  var btn = document.getElementById('top-btn');
+  window.addEventListener('scroll', function () {
+    btn.classList.toggle('show', window.scrollY > 600);
+  }, { passive: true });
+  btn.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+})();
+</script>
+</body>
+</html>
