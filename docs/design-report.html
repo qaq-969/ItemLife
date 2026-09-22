@@ -496,7 +496,7 @@
         <text x="620" y="506" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Redis 7（AOF 持久化）</text>
         <text x="620" y="524" font-size="11" fill="#64748b" text-anchor="middle">限流 · 令牌吊销 · 看板缓存</text>
         <!-- 内网标注 -->
-        <text x="450" y="556" font-size="11" fill="#94a3b8" text-anchor="middle">内网 Docker 网络 backend：仅 Nginx 暴露 80/443 端口，MySQL / Redis 不对外</text>
+        <text x="450" y="556" font-size="11" fill="#94a3b8" text-anchor="middle">内网 Docker 网络 backend：仅 Nginx 暴露 :80，MySQL / Redis 不对外</text>
       </svg>
       <div class="cap">图 4-1 系统总体架构（生产环境）</div>
     </div>
@@ -1322,7 +1322,7 @@
         <rect x="352" y="88" width="148" height="78" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
         <text x="426" y="112" font-size="12.5" font-weight="700" fill="#155e75" text-anchor="middle">web · nginx:alpine</text>
         <text x="426" y="130" font-size="10" fill="#0e7490" text-anchor="middle">前端静态产物 + 反代</text>
-        <text x="426" y="148" font-size="10" fill="#0e7490" text-anchor="middle">仅发布 :80 / :443</text>
+        <text x="426" y="148" font-size="10" fill="#0e7490" text-anchor="middle">仅发布 :80（TLS 在外层）</text>
         <line x1="500" y1="126" x2="524" y2="126" stroke="#94a3b8" stroke-width="2"/>
         <text x="512" y="84" font-size="10" fill="#64748b" text-anchor="middle">backend 网络</text>
         <!-- api -->
@@ -1356,19 +1356,20 @@
     <h3>10.2 docker-compose.yml（生产草案）</h3>
     <pre class="code"><span class="k">services</span>:
   <span class="f">web</span>:                        <span class="c"># 前端 + 反代</span>
-    <span class="k">build</span>: { <span class="k">context</span>: ./apps/web, <span class="k">target</span>: prod }   <span class="c"># 多阶段：node build → nginx</span>
-    <span class="k">ports</span>: [<span class="s">"80:80"</span>, <span class="s">"443:443"</span>]   <span class="c"># 供外部反向代理回源</span>
+    <span class="k">build</span>: { <span class="k">context</span>: ., <span class="k">dockerfile</span>: apps/web/Dockerfile, <span class="k">target</span>: prod }   <span class="c"># 多阶段：node build → nginx（上下文为仓库根，便于 pnpm 工作区安装）</span>
+    <span class="k">ports</span>: [<span class="s">"${WEB_PORT:-80}:80"</span>]   <span class="c"># 供外部反向代理回源（TLS 在外层终止）</span>
     <span class="k">networks</span>: [<span class="s">frontend, backend</span>]
-    <span class="k">depends_on</span>: [api]
+    <span class="k">depends_on</span>:
+      <span class="f">api</span>: { <span class="k">condition</span>: service_healthy }
     <span class="k">restart</span>: unless-stopped
 
   <span class="f">api</span>:
-    <span class="k">build</span>: { <span class="k">context</span>: ./apps/api }
+    <span class="k">build</span>: { <span class="k">context</span>: ., <span class="k">dockerfile</span>: apps/api/Dockerfile, <span class="k">target</span>: runner }
     <span class="k">env_file</span>: .env
     <span class="k">environment</span>:
       - <span class="s">NODE_ENV=production</span>
-      - <span class="s">DATABASE_URL=mysql://itemlife:${DB_PASSWORD}@mysql:3306/itemlife</span>
-      - <span class="s">REDIS_URL=redis://redis:6379</span>
+      - <span class="s">DATABASE_URL=mysql://${MYSQL_USER}:${DB_PASSWORD}@mysql:3306/${MYSQL_DATABASE}</span>
+      - <span class="s">REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0</span>
     <span class="k">networks</span>: [<span class="s">backend</span>]
     <span class="k">depends_on</span>:
       <span class="f">mysql</span>: { <span class="k">condition</span>: service_healthy }
@@ -1390,7 +1391,7 @@
     <span class="k">volumes</span>: [<span class="s">"mysql_data:/var/lib/mysql"</span>]
     <span class="k">networks</span>: [<span class="s">backend</span>]
     <span class="k">healthcheck</span>:
-      <span class="k">test</span>: [<span class="s">"CMD"</span>, <span class="s">"mysqladmin"</span>, <span class="s">"ping"</span>, <span class="s">"-h"</span>, <span class="s">"localhost"</span>]
+      <span class="k">test</span>: [<span class="s">"CMD-SHELL"</span>, <span class="s">"mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"</span>]
       <span class="k">interval</span>: 10s
       <span class="k">retries</span>: 10
     <span class="k">restart</span>: unless-stopped
@@ -1401,7 +1402,7 @@
     <span class="k">volumes</span>: [<span class="s">"redis_data:/data"</span>]
     <span class="k">networks</span>: [<span class="s">backend</span>]
     <span class="k">healthcheck</span>:
-      <span class="k">test</span>: [<span class="s">"CMD"</span>, <span class="s">"redis-cli"</span>, <span class="s">"-a"</span>, <span class="s">"${REDIS_PASSWORD}"</span>, <span class="s">"ping"</span>]
+      <span class="k">test</span>: [<span class="s">"CMD-SHELL"</span>, <span class="s">"redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"</span>]
       <span class="k">interval</span>: 10s
     <span class="k">restart</span>: unless-stopped
 
@@ -1411,13 +1412,13 @@
   <span class="f">uploads</span>:            <span class="c"># 物品图片等用户上传文件</span>
 
 <span class="k">networks</span>:
-  <span class="f">frontend</span>:              <span class="c"># 仅 web：发布 80/443，承接外部反代回源</span>
+  <span class="f">frontend</span>:              <span class="c"># 仅 web：发布 HTTP 端口，承接外部反代回源</span>
     <span class="k">driver</span>: bridge
   <span class="f">backend</span>:               <span class="c"># web / api / mysql / redis：内部互通，不出外网</span>
     <span class="k">driver</span>: bridge
     <span class="k">internal</span>: <span class="s">true</span>
 </pre>
-    <p style="font-size:13px;color:var(--c-text-3)">MySQL 与 Redis 仅在 <code>backend</code> 网络可达、不映射宿主机端口；宿主机只发布 web 的 80/443，由你自备的外部反向代理回源（详见 10.3 网络设计与 10.5 对接方案）。</p>
+    <p style="font-size:13px;color:var(--c-text-3)">MySQL 与 Redis 仅在 <code>backend</code> 网络可达、不映射宿主机端口；宿主机只发布 web 的 HTTP 端口（默认 80，可用 <code>WEB_PORT</code> 调整），由你自备的外部反向代理回源（详见 10.3 网络设计与 10.5 对接方案）。</p>
 
     <h3>10.3 Compose 网络设计 <span class="tag tag-info">回答你的问题</span></h3>
     <p><strong>是的——同一个 compose 文件中的所有服务，默认会自动加入同一条以项目名命名的桥接网络 <code>&lt;项目名&gt;_default</code></strong>（本项目即 <code>itemlife_default</code>），相当于自动组建了一个内部局域网：</p>
@@ -1438,7 +1439,7 @@
       <li>目标机器安装 Docker Engine + Compose 插件（Windows / macOS 用 Docker Desktop，Linux 用发行版包）；</li>
       <li>复制 <code>.env.example → .env</code>，填写数据库口令、JWT 密钥、AES 密钥（脚本 <code>make gen-secrets</code> 可自动生成随机值）；</li>
       <li><code>docker compose up -d --build</code> → 拉取基础镜像、构建 web/api、启动 4 个服务；</li>
-      <li>api 容器 entrypoint：等待 MySQL 健康 → <code>prisma migrate deploy</code> 建表 → 写入预置分类种子数据 → 启动服务；</li>
+      <li>api 容器 entrypoint：等待 MySQL 健康 → <code>prisma migrate deploy</code> 建表 → 启动服务（需写入预置分类时设 <code>SEED_ON_START=1</code>，生产建议保持 0）；</li>
       <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，按引导开启 MFA。</li>
     </ol>
 
@@ -1448,7 +1449,7 @@
       <div class="cell">
         <h5>外部代理侧（你配置）</h5>
         <ul>
-          <li>将公网域名路由回源到本机 <code>:80</code>（如以 HTTPS 回源可保留 <code>:443</code>）；</li>
+          <li>将公网域名路由回源到本机 <code>:80</code>（TLS 在外层终止；默认回源走 HTTP，如需 HTTPS 回源可在 web 容器自行挂载证书并放行 443）；</li>
           <li>透传请求头：<code>X-Forwarded-Proto</code>、<code>X-Forwarded-For</code>（或 <code>X-Real-IP</code>）、<code>X-Forwarded-Host</code>，并保留 <code>Host</code>；</li>
           <li>HSTS 与证书续期由外层代理统一负责；如路径经过 CDN / WAF，注意放行 Cookie 与 Authorization 头。</li>
         </ul>
@@ -1456,7 +1457,7 @@
       <div class="cell">
         <h5>应用侧（已内置适配）</h5>
         <ul>
-          <li>API 开启 <code>trust proxy</code>——限流与审计按<strong>真实客户端 IP</strong> 计数，而非代理 IP；</li>
+          <li>API 开启 <code>trust proxy</code>——限流与审计按<strong>真实客户端 IP</strong> 计数，而非代理 IP；信任跳数由 <code>TRUST_PROXY</code> 控制（默认 <code>2</code> = 外部代理 + web 容器；不经外部代理时置 <code>1</code>）；</li>
           <li>Cookie 的 <code>Secure</code> 依据 <code>X-Forwarded-Proto</code> 动态设置：经公网 HTTPS 访问自动 Secure，内网 HTTP 直连可降级，两种方式都能正常登录；</li>
           <li>HSTS 不在内层重复下发，避免内网直连被强制跳转 HTTPS。</li>
         </ul>
@@ -1480,19 +1481,21 @@
     </div>
 
     <h3>10.7 开发模式</h3>
-    <pre class="code"><span class="c"># docker-compose.dev.yml（叠加文件）</span>
+    <pre class="code"><span class="c"># docker-compose.dev.yml（叠加文件，复用 Dockerfile 的 dev 阶段）</span>
 <span class="f">services</span>:
   <span class="f">api</span>:
-    <span class="k">command</span>: <span class="s">pnpm start:dev</span>          <span class="c"># 热重载</span>
-    <span class="k">volumes</span>: [<span class="s">"./apps/api/src:/app/src"</span>]
+    <span class="k">build</span>: { <span class="k">context</span>: ., <span class="k">dockerfile</span>: apps/api/Dockerfile, <span class="k">target</span>: dev }
+    <span class="k">command</span>: <span class="s">pnpm --filter @itemlife/api start:dev</span>   <span class="c"># 热重载</span>
+    <span class="k">volumes</span>: [<span class="s">"./apps/api/src:/repo/apps/api/src"</span>, <span class="s">"./packages/shared/src:/repo/packages/shared/src"</span>]
     <span class="k">ports</span>: [<span class="s">"3000:3000"</span>]           <span class="c"># 方便直连调试 / Swagger</span>
   <span class="f">web</span>:
-    <span class="k">image</span>: node:24-alpine
-    <span class="k">command</span>: <span class="s">pnpm dev --host</span>       <span class="c"># Vite Dev Server</span>
-    <span class="k">ports</span>: [<span class="s">"5173:5173"</span>]
+    <span class="k">build</span>: { <span class="k">context</span>: ., <span class="k">dockerfile</span>: apps/web/Dockerfile, <span class="k">target</span>: dev }
+    <span class="k">command</span>: <span class="s">pnpm --filter @itemlife/web dev --host 0.0.0.0 --port 80</span>   <span class="c"># Vite Dev Server</span>
+    <span class="k">environment</span>: [<span class="s">"VITE_DEV_API_TARGET=http://api:3000"</span>]
+    <span class="k">volumes</span>: [<span class="s">"./apps/web/src:/repo/apps/web/src"</span>, <span class="s">"./packages/shared/src:/repo/packages/shared/src"</span>]
   <span class="f">mysql</span>:
     <span class="k">ports</span>: [<span class="s">"3306:3306"</span>]           <span class="c"># 仅开发暴露，便于用客户端连库排查</span>
-<span class="c"># 使用：docker compose -f docker-compose.yml -f docker-compose.dev.yml up</span>
+<span class="c"># 使用：docker compose -f docker-compose.yml -f docker-compose.dev.yml up（或 make dev）</span>
 </pre>
   </section>
 
@@ -1507,44 +1510,40 @@
 ├── docs/
 │   └── design-report.html        <span class="c"># 本设计报告</span>
 ├── packages/
-│   └── shared/                   <span class="c"># 前后端共享：DTO 类型、常量、金额工具</span>
-│       └── src/{types,constants,money}.ts
+│   └── shared/                   <span class="c"># 前后端共享：DTO 类型、常量、金额与口令工具</span>
+│       └── src/{types,constants,money,password}.ts
 └── apps/
     ├── web/                      <span class="c"># ── 前端 Vue 3 ──</span>
-    │   ├── Dockerfile            <span class="c"># 多阶段：build → nginx</span>
-    │   ├── nginx.conf            <span class="c"># SPA 回退 + /api 反代 + 缓存头 + CSP</span>
+    │   ├── Dockerfile            <span class="c"># 多阶段：dev（Vite 热重载）→ build → nginx</span>
+    │   ├── nginx.conf            <span class="c"># SPA 回退 + /api 反代 + 缓存头 + 安全响应头</span>
     │   └── src/
-    │       ├── api/              <span class="c"># axios 实例 + 各模块接口封装</span>
-    │       ├── stores/           <span class="c"># Pinia：auth / domain(个人|家庭) / ui</span>
-    │       ├── composables/      <span class="c"># useMoney / useBreakpoint / useQuery 封装</span>
-    │       ├── components/       <span class="c"># 通用组件（MoneyInput / DomainSwitch / Chart）</span>
+    │       ├── api/              <span class="c"># axios 实例（含 401 静默续期）+ 各模块接口封装</span>
+    │       ├── stores/           <span class="c"># Pinia：auth（后续：domain 个人|家庭 / ui）</span>
+    │       ├── layouts/          <span class="c"># AppShell：手机底部 5 Tab / ≥1024px 侧边栏</span>
+    │       ├── components/       <span class="c"># 通用组件（后续：MoneyInput / DomainSwitch / Chart）</span>
+    │       ├── utils/            <span class="c"># 路由跳转等小工具</span>
     │       ├── views/
-    │       │   ├── auth/         <span class="c"># 登录 / 注册 / MFA 绑定与验证</span>
-    │       │   ├── ledger/       <span class="c"># 流水 / 记一笔 / 账户 / 分类管理</span>
-    │       │   ├── items/        <span class="c"># 物品列表 / 详情 / 看板</span>
-    │       │   ├── family/       <span class="c"># 家庭管理 / 邀请码</span>
-    │       │   ├── dashboard/    <span class="c"># 趋势看板</span>
-    │       │   └── settings/     <span class="c"># 设置 / 安全中心</span>
-    │       ├── router/           <span class="c"># 路由 + 登录/ MFA 守卫</span>
-    │       └── styles/           <span class="c"># Tailwind 入口 + 设计 Token</span>
+    │       │   ├── auth/         <span class="c"># 登录 / 注册 / MFA 验证与安全中心</span>
+    │       │   └── *.vue         <span class="c"># 首页 / 流水 / 记一笔 / 物品 / 家庭 / 设置 / 我的</span>
+    │       ├── router/           <span class="c"># 路由 + 登录守卫（MFA 守卫随 M1 落地）</span>
+    │       └── assets/styles/    <span class="c"># Tailwind 入口 + 设计 Token</span>
     └── api/                      <span class="c"># ── 后端 NestJS ──</span>
-        ├── Dockerfile
+        ├── Dockerfile            <span class="c"># runner（生产）+ dev（热重载）</span>
+        ├── docker-entrypoint.sh  <span class="c"># migrate deploy → 启动</span>
         ├── prisma/
         │   ├── schema.prisma     <span class="c"># 数据模型（第 5 章的落地）</span>
-        │   ├── migrations/       <span class="c"># 迁移历史</span>
+        │   ├── migrations/       <span class="c"># 迁移历史（0_init 为初始建表）</span>
         │   └── seed.ts           <span class="c"># 预置分类种子</span>
         └── src/
+            ├── config/           <span class="c"># 环境变量集中解析（trust proxy / 限流 / Swagger）</span>
             ├── modules/
-            │   ├── auth/         <span class="c"># 注册登录 / TOTP / 令牌 / 限流</span>
-            │   ├── ledger/       <span class="c"># 账户 / 分类 / 流水</span>
-            │   ├── item/         <span class="c"># 物品 / 配件 / 成本计算</span>
-            │   ├── family/       <span class="c"># 家庭 / 邀请码 / 成员</span>
-            │   ├── dashboard/    <span class="c"># 趋势聚合查询</span>
-            │   └── user/         <span class="c"># 个人资料 / 偏好</span>
+            │   └── health/       <span class="c"># 健康检查（后续：auth / ledger / item / family / dashboard / user）</span>
             ├── common/
-            │   ├── guards/       <span class="c"># JwtGuard / MfaGuard / OwnerGuard</span>
-            │   ├── crypto/       <span class="c"># argon2 / aes-gcm / sha256 封装</span>
-            │   └── interceptors/ <span class="c"># 响应包络 / 审计日志</span>
+            │   ├── prisma/       <span class="c"># PrismaService（探活 + 优雅关闭）</span>
+            │   ├── redis/        <span class="c"># ioredis 客户端（限流 / 吊销 / 缓存）</span>
+            │   ├── filters/      <span class="c"># 统一错误响应 { code, message, details? }</span>
+            │   ├── interceptors/ <span class="c"># 响应包络 { code, message, data }（后续：审计日志）</span>
+            │   └── utils/        <span class="c"># UUID v7 ↔ BINARY(16) / BigInt JSON</span>
             └── main.ts
 </pre>
   </section>
