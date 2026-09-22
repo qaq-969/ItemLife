@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
+    "dev:memory": "ts-node --transpile-only scripts/dev-memory.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:auth": "ts-node --transpile-only scripts/auth-smoke.ts",
     "prisma:generate": "prisma generate",
