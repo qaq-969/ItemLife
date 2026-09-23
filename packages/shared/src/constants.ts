@@ -12,6 +12,16 @@ export type AccountType = (typeof ACCOUNT_TYPES)[number];
 export const INTEREST_FREQS = ['monthly', 'quarterly', 'yearly'] as const;
 export type InterestFreq = (typeof INTEREST_FREQS)[number];
 
+/** 结息周期的月数：用于判断「距上次结息是否满一个周期」。 */
+export const INTEREST_FREQ_MONTHS: Record<InterestFreq, number> = {
+  monthly: 1,
+  quarterly: 3,
+  yearly: 12,
+};
+
+export const CATEGORY_KINDS = ['expense', 'income'] as const;
+export type CategoryKind = (typeof CATEGORY_KINDS)[number];
+
 export const ITEM_STATUSES = ['in_use', 'idle', 'retired', 'lost'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 

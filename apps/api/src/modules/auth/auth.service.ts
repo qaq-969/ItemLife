@@ -4,6 +4,7 @@ import { checkPasswordStrength } from '@itemlife/shared';
 import { AuditService } from '../../common/audit/audit.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { seedPresetCategories } from '../categories/category-presets';
 import { bytesToUuid, newId, toIdBytes } from '../../common/utils/id';
 import { maskEmail } from '../../common/utils/mask';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
@@ -52,13 +53,19 @@ export class AuthService {
       throw new ConflictException({ code: 'EMAIL_TAKEN', message: '该邮箱已注册，请直接登录' });
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        id: newId(),
-        email,
-        passwordHash: await this.crypto.hashPassword(dto.password),
-        nickname: dto.nickname?.trim() || null,
-      },
+    const passwordHash = await this.crypto.hashPassword(dto.password);
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          id: newId(),
+          email,
+          passwordHash,
+          nickname: dto.nickname?.trim() || null,
+        },
+      });
+      // 预置分类随注册一次性复制到个人数据域（设计报告 5.2 ⑦），失败则整体回滚
+      await seedPresetCategories(tx, { ownerType: 'user', ownerId: created.id });
+      return created;
     });
 
     this.audit.record('auth.register', { userId: bytesToUuid(user.id), email: maskEmail(email), ip: device.ip });

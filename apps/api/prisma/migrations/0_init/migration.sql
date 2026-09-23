@@ -122,6 +122,7 @@ CREATE TABLE `categories` (
     `sort_order` INTEGER NOT NULL DEFAULT 0,
     `system_tag` VARCHAR(30) NULL,
     `is_system` BOOLEAN NOT NULL DEFAULT false,
+    `archived_at` DATETIME(3) NULL,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,
     `deleted_at` DATETIME(3) NULL,

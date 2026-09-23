@@ -11,6 +11,7 @@
     "dev:memory": "ts-node --transpile-only scripts/dev-memory.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:auth": "ts-node --transpile-only scripts/auth-smoke.ts",
+    "smoke:ledger": "ts-node --transpile-only scripts/ledger-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

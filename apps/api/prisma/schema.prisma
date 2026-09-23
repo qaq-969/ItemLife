@@ -203,6 +203,8 @@ model Category {
   /// 系统标签：investment_return（投资收益）/ interest（自动结息），驱动看板口径
   systemTag  String?      @map("system_tag") @db.VarChar(30)
   isSystem   Boolean      @default(false) @map("is_system")
+  /// 停用时间：分类已有流水时不允许删除，只能停用（不再出现在记账选择器中）
+  archivedAt DateTime?    @map("archived_at")
   createdAt  DateTime     @default(now()) @map("created_at")
   updatedAt  DateTime     @updatedAt @map("updated_at")
   deletedAt  DateTime?    @map("deleted_at")

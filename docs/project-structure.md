@@ -2,7 +2,7 @@
 
 > 配套文档：[`design-report.html`](design-report.html)（系统设计报告，写「为什么这么设计」）·
 > 本文档写「东西放在哪、新代码该往哪加」。
-> 最后更新：2026-09-22（M1 认证模块完成后）。
+> 最后更新：2026-09-23（M2 记账核心后端完成后）。
 
 ## 0. 一句话总览
 
@@ -47,9 +47,9 @@ itemlife/
 
 | 文件 | 内容 |
 | --- | --- |
-| `src/money.ts` | 金额换算与四舍五入（元 ↔ 分，整数分存储） |
-| `src/constants.ts` | API 前缀、错误码、限额等常量 |
-| `src/types.ts` | 跨端 DTO / 枚举类型 |
+| `src/money.ts` | 金额换算与四舍五入（元 ↔ 分，整数分存储）、`interestFromDailySum()`（单利按日累计） |
+| `src/constants.ts` | API 前缀、错误码、限额、`INTEREST_FREQ_MONTHS`、`SYSTEM_TAGS`、预置分类 |
+| `src/types.ts` | 跨端 DTO / 枚举类型（含 `TransactionDto` / `AccountSummaryDto` / `InterestRunResult`） |
 | `src/password.ts` | `PASSWORD_MIN_LENGTH` 与 `checkPasswordStrength()`（前端实时校验与后端注册校验共用同一份规则） |
 
 判定标准：**「如果只写在前端，后端会不会有第二种写法？」会 → 放 shared。**
@@ -103,7 +103,10 @@ apps/api/
 │   └── ...
 ├── scripts/                  # 不参与构建的离线脚本
 │   ├── auth-smoke.ts         #   认证链路冒烟（内存假 DB/Redis，无需 MySQL 即可跑）
-│   └── support/in-memory.ts  #   上述脚本用的内存 Prisma / Redis 替身
+│   ├── ledger-smoke.ts       #   记账核心冒烟（分类 / 账户 / 流水 / 转账 / 结息）
+│   └── support/
+│       ├── mini-prisma.ts    #   通用内存 Prisma 引擎（按 schema 建表 + 关系解析）
+│       └── in-memory.ts      #   本仓库的表定义与 Redis 替身
 ├── src/
 │   ├── main.ts               # 进程入口：读配置 → configureApp → listen
 │   ├── app.setup.ts          # ★ 应用装配（管道/拦截器/过滤器/前缀/CORS/Swagger），main 与冒烟脚本共用
@@ -115,14 +118,21 @@ apps/api/
 │   │   ├── guards/jwt-auth.guard.ts           # 全局登录守卫（@Public() 放行）
 │   │   ├── decorators/                        # @Public() / @CurrentUser()
 │   │   ├── types/auth-user.ts                 # 认证后的请求上下文类型
+│   │   ├── scope/                             # ★ 数据域（个人 / 家庭）解析与越权 404
 │   │   ├── crypto/                            # Argon2id 口令哈希、AES-256-GCM 密钥加密、随机数、SHA-256
 │   │   ├── audit/                             # 安全审计事件落日志（单行 JSON）
 │   │   ├── prisma/                            # PrismaService（连接生命周期）
 │   │   ├── redis/                             # REDIS_CLIENT 提供者（ioredis）
-│   │   └── utils/                             # id.ts（UUID ↔ BINARY(16)）、mask.ts（脱敏）、bigint-json.ts
+│   │   ├── dto/owner-body.dto.ts              # 请求体里的 owner:{type,id}（与 ?domain= 等价）
+│   │   └── utils/                             # id.ts（UUID ↔ BINARY(16)）、date.ts（UTC 天/月运算）、
+│   │                                          # cursor.ts（游标编解码）、mask.ts、bigint-json.ts
 │   └── modules/               # ★ 业务模块，一个功能域一个目录
 │       ├── health/            #   健康检查（/health）
-│       └── auth/              #   认证（见下）
+│       ├── auth/              #   认证（见 4.2）
+│       ├── categories/        #   分类树 + 预置 + 排序 + 停用（见 4.4）
+│       ├── accounts/          #   账户 CRUD + 派生余额 + 计息配置（见 4.4）
+│       ├── transactions/      #   记一笔 / 转账 / 分摊 / 列表筛选 / 小计（见 4.4）
+│       └── interest/          #   结息：Cron 自动 + 手动预览与入账（见 4.4）
 ├── nest-cli.json  tsconfig.json  tsconfig.build.json
 └── Dockerfile  docker-entrypoint.sh   # 容器入口：等 DB → 迁移 → 启动
 ```
@@ -135,7 +145,7 @@ HTTP 请求
   → 全局守卫  ThrottlerGuard（限流）→ JwtAuthGuard（鉴权）
   → 控制器 Controller                 只做 HTTP 契约：取参、调 service、写 Cookie、选状态码
   → 服务 Service                      业务规则的唯一落点（事务、幂等、错误码都在这层）
-  → 能力提供者（TokenService / MfaService / CryptoService / LoginThrottleService）
+  → 能力提供者（TokenService / MfaService / BalanceService / InterestService / …）
   → 基础设施（PrismaService / REDIS_CLIENT）
   → 全局拦截器 TransformInterceptor（包络成功响应）
   → 全局过滤器 AllExceptionsFilter（包络异常）
@@ -169,15 +179,40 @@ modules/auth/
 
 ### 4.3 新增一个业务模块（Checklist）
 
-以 M2 的 `LedgerModule` 为例：
+以 M2 的 `TransactionsModule` 为例：
 
-1. `modules/ledger/` 建四件套：`ledger.module.ts` / `ledger.controller.ts` / `ledger.service.ts` / `dto/`。
-2. 在 `app.module.ts` 的 `imports` 里注册（注释里已列出 M2+ 规划：Ledger / Item / Family / Dashboard / User）。
+1. `modules/<域>/` 建四件套：`<域>.module.ts` / `<域>.controller.ts` / `<域>.service.ts` / `dto/`（入参 DTO + 出参 VO）。
+2. 在 `app.module.ts` 的 `imports` 里注册（注释里已列出 M2+ 规划：Item / Family / Dashboard / User）。
 3. 数据模型改 `prisma/schema.prisma`，然后 `pnpm --filter @itemlife/api prisma:migrate`（生成迁移 SQL 并应用）。
 4. 控制器默认就受 `JwtAuthGuard` 保护；需要用当前用户就 `@CurrentUser()` 取 `{ id, sessionId, mfa }`。
-5. 权限判定（个人 / 家庭空间归属）写在 Service，并统一抛业务错误码；跨表写入一律放进 `$transaction`。
-6. 需要审计的敏感操作调用 `AuditService.record('域.动作', {...})`（字段值先脱敏）。
+5. 数据域（个人 / 家庭）一律经 `OwnerScopeService` 解析，Service 用 `scopes.filter(scope)` 拼查询条件；
+   越权与不存在必须返回**同一个** 404（见 4.4）。
+6. 跨表写入一律放进 `$transaction`；需要审计的操作调 `AuditService.record('域.动作', {...})`（字段值先脱敏）。
 7. 类型若两端都要用，加进 `packages/shared/src/types.ts`，不要各写一份。
+8. 在 `scripts/ledger-smoke.ts` 里补一组断言，然后 `pnpm --filter @itemlife/api smoke:ledger` 验证。
+
+### 4.4 记账核心（M2）中的几个关键约定
+
+数据域（`common/scope/`）：每条账户 / 分类 / 流水 / 物品记录都带 `owner_type('user'|'household') + owner_id(BINARY(16))`。
+查询用 `?domain=household:<uuid>`，写请求用请求体 `owner: { type, id }`（`common/dto/owner-body.dto.ts`）。
+**资源级 404 必须与「记录不存在」同码**：`resolveOwned()` 的 `onDenied` 参数把越权收敛成 `TRANSACTION_NOT_FOUND`
+这类资源码；若「无权」与「不存在」返回不同 code，就能被用来逐个探测他人的记录是否存在。
+只有数据域本身越权（`?domain=household:<uuid>` 且不是成员）才用 `SCOPE_NOT_FOUND`。
+
+余额是**派生值**（`balance.service.ts`）：`初始余额 + Σ收入 − Σ支出 + Σ转入 − Σ转出`，全部基于 `deleted_at IS NULL` 的行实时聚合，
+没有余额列，因此删流水 / 改金额后余额自动回滚，不需要补偿逻辑。
+
+转账（`transactions.service.ts`）：入参只写 `type='transfer_out'` + `toAccountId`，落库为**共享 `transfer_group_id` 的两条腿**；
+改金额 / 改时间 / 删流水都按组整体处理，避免单腿残留导致余额对不上。
+
+分摊（`transaction_items`）：一笔流水可关联多个物品，`amount_minor=NULL` 表示「整笔归该物品」；
+校验规则（重复物品 / 漏填金额 / 分摊合计超出）在 `resolveAllocations()`。
+
+幂等（两种场景两套机制）：`Idempotency-Key` 请求头走 Redis（`SET NX` 预约 → 记住结果），Redis 不可用时降级为不拦截；
+结息走数据库乐观锁 `updateMany({ where: { id, interestPostedAt: 原值 } })`，重跑 / 多实例并发只有一个能抢到。
+
+结息口径（`interest.service.ts`）：区间 = `[上次结息日 + 1, 今天]`，`dueAt = 锚点 + 周期` 只决定自动任务何时触发；
+入账后锚点推进到今天，因此「同一天重跑」区间为空 → 400 `INTEREST_PERIOD_EMPTY`，绝不重复入账。
 
 ## 5. 环境变量与配置
 
@@ -201,11 +236,16 @@ modules/auth/
 | `pnpm typecheck` | 三个包一起做类型检查 |
 | `pnpm build` | shared → web → api 全量构建 |
 | `pnpm --filter @itemlife/api smoke:auth` | **认证链路离线冒烟**：内存假 DB/Redis 启动真实 Nest 应用，跑完注册 → 登录 → MFA → 恢复码 → 令牌旋转/盗用 → 锁定 → 登出共 37 项断言 |
+| `pnpm --filter @itemlife/api smoke:ledger` | **记账核心离线冒烟**：预置分类 → 分类增删改排序 → 账户与派生余额 → 记一笔与分摊校验 → 转账联动 → 改删回滚 → 列表筛选分页小计 → 幂等键 → 结息幂等 → 数据域隔离，共 65 项断言 |
 | `make up` / `make dev` | 生产 / 开发容器编排（需 Docker 守护进程） |
 | `pnpm --filter @itemlife/api prisma:studio` | 可视化查看数据 |
 
 冒烟脚本为什么做成「内存替身 + 真实 HTTP」：可以在没有 MySQL / Redis（例如本机未启动 Docker）的情况下验证
-守卫、管道、拦截器、Cookie、TOTP、令牌轮换这些**真实代码路径**，而不是只测 mock。
+守卫、管道、拦截器、Cookie、TOTP、令牌轮换、派生余额、转账成对写入、结息幂等这些**真实代码路径**，而不是只测 mock。
+
+内存引擎的注意点（`scripts/support/mini-prisma.ts`）：它是**按运行时值类型匹配**的简化实现（Uint8Array 比字节、Date 比时间戳），
+只覆盖本仓库实际用到的查询形态。新增查询若用到 `where` 之外的 Prisma 特性（如 `_avg`、`distinct`、`having`），
+要么在引擎里补，要么把断言改成走真实 MySQL。
 
 ## 8. 命名与风格约定
 
@@ -219,6 +259,15 @@ modules/auth/
 
 - 已完成：monorepo 骨架、共享包、Docker 编排、**M1 认证模块**——后端注册 / 两段式登录 / TOTP 绑定与校验 /
   恢复码 / 刷新令牌轮换与盗用检测 / 失败锁定 / 登出全链路，前端登录、注册、两步验证、安全设置（MFA 绑定与恢复码展示）四个页面。
+- 已完成（后端）：**M2 记账核心**——数据域（个人 / 家庭）、分类树与预置分类、账户与派生余额、计息配置、
+  记一笔（收 / 支 / 转账 + 多物品分摊 + 幂等键 + 游标分页 + 区间小计）、利息自动结息与手动结息。
+  离线冒烟 `smoke:ledger` 65 项、`smoke:auth` 37 项全绿；`pnpm typecheck` 无错误。
+- **M2 前端尚未开工**：`LedgerView` / `NewTransactionView` / `SettingsView` 仍是占位页，
+  分类管理、账户管理、记一笔、流水筛选这些界面待做（后端契约已冻结，见各模块 `dto/*.vo.ts`）。
 - 与设计报告的一处**有意偏差**：报告流程 A 写「注册后自动签发待开启 MFA 的会话」，实现改为**注册后跳登录页**
   （`/login?registered=1`），原因是自动登录会让「注册 → 引导绑定 MFA」多一次令牌往返，收益低而状态分支多；绑定 MFA 仍可在登录后由安全页触发。
+- 另一处**有意偏差**：报告 8.5 写「入账后把 `interest_posted_at` 推进至结息日」，实现推进至**今天**，
+  即区间终点始终是今天（按实际天数计息）；这样预览金额 = 立即入账金额，服务停机数日后重跑能补上这几天的利息，不会漏算。
 - 尚未验证：`make up` 的容器内端到端（本机 Docker 守护进程未启动）。首次在目标内网部署时，按设计报告第 10 章的部署清单复核一遍。
+- 待决：仓库里 compose 文件命名与 README 描述不一致（`docker-compose.yml` 目前是开发叠加内容、
+  `docker-compose.prod.yml` 未入库），需要统一一次命名。

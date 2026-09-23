@@ -56,3 +56,11 @@ export function dailyInterestMinor(
   const raw = (balanceMinor * annualRateBp * days) / (10_000 * 365);
   return Math.round(raw);
 }
+
+/**
+ * 结息口径（设计报告 8.5）：Σ(每日余额 × 年化 ÷ 365)。
+ * dailyBalanceSumMinor 为区间内每日日终余额之和（分），避免逐日浮点累加。
+ */
+export function interestFromDailySum(dailyBalanceSumMinor: number, annualRateBp: number): number {
+  return Math.round((dailyBalanceSumMinor * annualRateBp) / (10_000 * 365));
+}

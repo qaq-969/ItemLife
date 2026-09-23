@@ -52,10 +52,11 @@ pnpm dev:api                       # 终端 1：NestJS（http://localhost:3000�
 pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/api 代理到 3000）
 ```
 
-不依赖 MySQL / Redis 也能验证认证链路（内存替身 + 真实 HTTP 全链路断言）：
+不依赖 MySQL / Redis 也能验证后端业务链路（内存替身 + 真实 HTTP 全链路断言）：
 
 ```bash
-pnpm --filter @itemlife/api smoke:auth
+pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
+pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 65 项
 ```
 
 也可以在容器里开发（源码挂载 + 热重载，前后端一致的容器环境）：
