@@ -433,6 +433,7 @@ export class TransactionsService {
       ...(query.type ? { type: query.type } : {}),
       ...(query.accountId ? { accountId: this.requireId(query.accountId) } : {}),
       ...(query.categoryId ? { categoryId: this.requireId(query.categoryId) } : {}),
+      ...(query.itemId ? { itemLinks: { some: { itemId: this.requireId(query.itemId) } } } : {}),
       ...(from || to
         ? { occurredAt: { ...(from ? { gte: from } : {}), ...(to ? { lt: addDaysUtc(to, 1) } : {}) } }
         : {}),

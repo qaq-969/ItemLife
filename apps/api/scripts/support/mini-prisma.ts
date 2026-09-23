@@ -56,12 +56,24 @@ export function matchValue(actual: any, expected: any): boolean {
   return actual === expected;
 }
 
-export function matchWhere(row: Row, where: any): boolean {
+export function matchWhere(row: Row, where: any, table?: MemoryTable, tables?: TableMap): boolean {
   if (!where) return true;
   return Object.entries(where).every(([key, value]) => {
-    if (key === 'AND') return asArray(value).every((clause) => matchWhere(row, clause));
-    if (key === 'OR') return asArray(value).some((clause) => matchWhere(row, clause));
-    if (key === 'NOT') return !asArray(value).every((clause) => matchWhere(row, clause));
+    if (key === 'AND') return asArray(value).every((clause) => matchWhere(row, clause, table, tables));
+    if (key === 'OR') return asArray(value).some((clause) => matchWhere(row, clause, table, tables));
+    if (key === 'NOT') return !asArray(value).every((clause) => matchWhere(row, clause, table, tables));
+
+    // 关系过滤（如 itemLinks: { some: { itemId } }）：借关系解析器取关联行再递归匹配
+    if (table && tables && typeof value === 'object' && value !== null) {
+      const relation = table.spec.relations?.[key];
+      if (relation && ('some' in value || 'every' in value || 'none' in value)) {
+        const related = asArray(relation(row, tables) ?? []) as Row[];
+        if ('some' in value) return related.some((item) => matchWhere(item, value.some));
+        if ('every' in value) return related.every((item) => matchWhere(item, value.every));
+        return related.length === 0;
+      }
+    }
+
     // 复合唯一键（如 householdId_userId）：字段名不在行上时按子字段逐项匹配
     if (!(key in row) && value && typeof value === 'object' && !(value instanceof Uint8Array) && !(value instanceof Date)) {
       return Object.entries(value).every(([subKey, subValue]) => matchValue(row[subKey], subValue));
@@ -98,8 +110,8 @@ export class MemoryTable {
     return row;
   }
 
-  where(where: any): Row[] {
-    return this.rows.filter((row) => matchWhere(row, where));
+  where(where: any, tables?: TableMap): Row[] {
+    return this.rows.filter((row) => matchWhere(row, where, this, tables));
   }
 }
 
@@ -141,17 +153,17 @@ function createDelegate(tableName: string, table: MemoryTable, tables: TableMap,
     },
 
     findFirst: async ({ where, orderBy, select, include }: any) => {
-      const rows = orderBy ? sortRows(table.where(where), orderBy) : table.where(where);
+      const rows = orderBy ? sortRows(table.where(where, tables), orderBy) : table.where(where, tables);
       return project(expand(rows[0] ?? null, include), select);
     },
 
     findUnique: async ({ where, select, include }: any) => {
-      const row = table.where(where)[0] ?? null;
+      const row = table.where(where, tables)[0] ?? null;
       return project(expand(row, include), select);
     },
 
     findMany: async ({ where, orderBy, take, skip, cursor, select, include }: any) => {
-      let rows = orderBy ? sortRows(table.where(where), orderBy) : table.where(where);
+      let rows = orderBy ? sortRows(table.where(where, tables), orderBy) : table.where(where, tables);
 
       if (cursor) {
         const [field, value] = Object.entries(cursor)[0]!;
@@ -166,23 +178,23 @@ function createDelegate(tableName: string, table: MemoryTable, tables: TableMap,
       return rows.map((row) => project(expand(row, include), select));
     },
 
-    count: async ({ where }: any = {}) => table.where(where).length,
+    count: async ({ where }: any = {}) => table.where(where, tables).length,
 
     update: async ({ where, data, select, include }: any) => {
-      const row = table.where(where)[0];
+      const row = table.where(where, tables)[0];
       if (!row) throw new Error(`[${tableName}] update 目标不存在`);
       Object.assign(row, data, { updatedAt: new Date() });
       return project(expand(row, include), select);
     },
 
     updateMany: async ({ where, data }: any) => {
-      const rows = table.where(where);
+      const rows = table.where(where, tables);
       rows.forEach((row) => Object.assign(row, data, { updatedAt: new Date() }));
       return { count: rows.length };
     },
 
     deleteMany: async ({ where }: any) => {
-      const targets = new Set(table.where(where));
+      const targets = new Set(table.where(where, tables));
       for (let index = table.rows.length - 1; index >= 0; index -= 1) {
         if (targets.has(table.rows[index]!)) table.rows.splice(index, 1);
       }
@@ -193,7 +205,7 @@ function createDelegate(tableName: string, table: MemoryTable, tables: TableMap,
       const fields: string[] = asArray(by);
       const groups = new Map<string, Row>();
 
-      for (const row of table.where(where)) {
+      for (const row of table.where(where, tables)) {
         const key = fields.map((field) => (row[field] instanceof Uint8Array ? toHex(row[field]) : String(row[field]))).join('|');
         let group = groups.get(key);
         if (!group) {

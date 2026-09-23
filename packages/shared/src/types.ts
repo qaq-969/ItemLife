@@ -160,5 +160,66 @@ export interface ItemDto {
   expectedLifespanDays: number | null;
   status: ItemStatus;
   currency: string;
+  categoryId: string | null;
+  category: CategoryBrief | null;
+  note: string | null;
+  /** 配件批次数量（列表页提示用，不计入成本摘要） */
+  accessoryCount: number;
   cost: ItemCostSummary;
+  createdAt: string;
+}
+
+/** 配件批次（含剩余数量）。 */
+export interface AccessoryDto {
+  id: string;
+  itemId: string;
+  name: string;
+  unitPriceMinor: number;
+  totalQty: number;
+  usedQty: number;
+  remainingQty: number;
+  purchasedAt: string;
+  /** 关联的购买流水（可选） */
+  transactionId: string | null;
+  createdAt: string;
+}
+
+/** 配件使用审计：正数为消耗、负数为撤销。 */
+export interface AccessoryUsageDto {
+  id: string;
+  accessoryId: string;
+  accessoryName: string;
+  deltaQty: number;
+  usedQtyAfter: number;
+  actorUserId: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+/** 成本演进折线的一个点：某日结束时的累计持有成本（分）。 */
+export interface CostPointDto {
+  date: string;
+  holdCostMinor: number;
+}
+
+/** 物品详情：成本指标 + 配件批次 + 使用审计 + 成本演进 + 关联流水。 */
+export interface ItemDetailDto extends ItemDto {
+  accessories: AccessoryDto[];
+  usages: AccessoryUsageDto[];
+  costTimeline: CostPointDto[];
+  transactions: TransactionDto[];
+}
+
+/** 物品看板：总投入、在役数量、配件库存价值与成本排行。 */
+export interface ItemsOverviewDto {
+  /** 全部在册物品的总支付金额之和 */
+  payTotalMinor: number;
+  /** 当前持有成本之和（物品 + 已用配件） */
+  holdCostMinor: number;
+  /** 配件库存（未使用）价值之和 */
+  remainingStockMinor: number;
+  itemCount: number;
+  inUseCount: number;
+  /** 按日均持有成本倒序的成本排行（前 5 项足够覆盖首页卡片） */
+  topCostly: ItemDto[];
 }

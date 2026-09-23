@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { HealthModule } from './modules/health/health.module';
 import { InterestModule } from './modules/interest/interest.module';
+import { ItemsModule } from './modules/items/items.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { OwnerScopeModule } from './common/scope/owner-scope.module';
 
@@ -46,7 +47,9 @@ import { OwnerScopeModule } from './common/scope/owner-scope.module';
     TransactionsModule,
     AccountsModule,
     InterestModule,
-    // 后续模块（M3+）：ItemModule / FamilyModule / DashboardModule / UserModule
+    // M3 物品与配件：物品档案 / 配件库存与审计 / 成本指标 / 物品看板
+    ItemsModule,
+    // 后续模块（M4+）：FamilyModule / DashboardModule / UserModule
   ],
   providers: [
     // 全局限流（默认额度见 THROTTLE_* 环境变量），端点可用 @Throttle 收紧、@SkipThrottle 放开

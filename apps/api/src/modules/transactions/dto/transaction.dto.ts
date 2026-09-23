@@ -139,6 +139,11 @@ export class ListTransactionsQueryDto {
   @IsUUID()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: '按分摊到的物品过滤（物品详情页的「关联流水」）' })
+  @IsOptional()
+  @IsUUID()
+  itemId?: string;
+
   @ApiPropertyOptional({ description: '起始日（含），YYYY-MM-DD' })
   @IsOptional()
   @IsISO8601()

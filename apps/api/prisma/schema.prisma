@@ -80,6 +80,7 @@ model User {
   ownedHouseholds   Household[]       @relation("HouseholdOwner")
   createdInvites    HouseholdInvite[] @relation("InviteCreator")
   createdTransactions Transaction[]   @relation("TransactionCreator")
+  accessoryUsages     AccessoryUsage[]
 
   @@map("users")
 }
@@ -242,6 +243,8 @@ model Transaction {
   creator   User              @relation("TransactionCreator", fields: [createdBy], references: [id])
   // 物品关联统一走分摊表（一笔流水可关联 1～N 个物品）
   itemLinks TransactionItem[]
+  // 通过流水登记入库的配件批次
+  accessoryBatches ItemAccessory[]
 
   @@index([ownerType, ownerId, occurredAt])
   @@index([accountId, type, amountMinor])
@@ -286,6 +289,7 @@ model Item {
   deletedAt            DateTime?  @map("deleted_at")
 
   accessories     ItemAccessory[]
+  accessoryUsages AccessoryUsage[]
   transactionLinks TransactionItem[]
 
   @@index([ownerType, ownerId, status])
@@ -296,17 +300,45 @@ model Item {
 model ItemAccessory {
   id             Bytes    @id @db.Binary(16)
   itemId         Bytes    @map("item_id") @db.Binary(16)
-  name           String   @db.VarChar(50)
+  name           String   @db.VarChar(60)
   unitPriceMinor BigInt   @map("unit_price_minor")
   totalQty       Int      @map("total_qty")
   usedQty        Int      @default(0) @map("used_qty")
+  /// 配件购入日期：同一物品可分批入库，成本按批次单价计算
+  purchasedAt    DateTime @map("purchased_at") @db.Date
+  /// 关联的购买流水（可选）：对账用，成本指标不读流水，避免双重计数
+  transactionId  Bytes?   @map("transaction_id") @db.Binary(16)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item        Item               @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transaction Transaction?       @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  usages      AccessoryUsage[]
 
   @@index([itemId])
   @@map("item_accessories")
+}
+
+/// 配件使用审计：每次「使用一个 / 撤销一个」写入一行，可追溯谁在什么时候用掉了一枚（设计报告 5.2 ⑩）。
+/// 成本演进折线的台阶也由本表时间线还原——比只存 used_qty 多一份可回溯的凭据。
+model AccessoryUsage {
+  id           Bytes    @id @db.Binary(16)
+  accessoryId  Bytes    @map("accessory_id") @db.Binary(16)
+  itemId       Bytes    @map("item_id") @db.Binary(16)
+  /// 正数为消耗、负数为撤销
+  deltaQty     Int      @map("delta_qty")
+  /// 本次变更后的已用数量，便于按时间线还原持有成本
+  usedQtyAfter Int      @map("used_qty_after")
+  actorUserId  Bytes?   @map("actor_user_id") @db.Binary(16)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  accessory ItemAccessory @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  item      Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actor     User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([accessoryId, createdAt])
+  @@index([itemId, createdAt])
+  @@map("accessory_usages")
 }
 
 // ---------------------------------------------------------------- 货币扩展预留

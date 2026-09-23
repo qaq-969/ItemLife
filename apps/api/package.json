@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "smoke:auth": "ts-node --transpile-only scripts/auth-smoke.ts",
     "smoke:ledger": "ts-node --transpile-only scripts/ledger-smoke.ts",
+    "smoke:items": "ts-node --transpile-only scripts/items-smoke.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",

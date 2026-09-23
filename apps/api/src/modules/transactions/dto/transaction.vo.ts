@@ -1,10 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { TransactionItemAllocation, TransactionType } from '@itemlife/shared';
+import type {
+  AccountBrief,
+  AccountType,
+  CategoryBrief,
+  TransactionDto,
+  TransactionItemAllocation,
+  TransactionType,
+} from '@itemlife/shared';
 import { bytesToUuid } from '../../../common/utils/id';
 
 /** 列表查询时随行返回的关系快照（Prisma include 的结果）。 */
 export interface TransactionRelations {
-  account?: { id: Uint8Array; name: string; type: string } | null;
+  account?: { id: Uint8Array; name: string; type: AccountType } | null;
   category?: { id: Uint8Array; name: string; icon: string | null; color: string | null } | null;
   itemLinks?: Array<{ itemId: Uint8Array; amountMinor: bigint | null }>;
 }
@@ -26,7 +33,7 @@ export interface TransactionRow extends TransactionRelations {
   createdAt: Date;
 }
 
-export class TransactionVo {
+export class TransactionVo implements TransactionDto {
   @ApiProperty()
   id!: string;
 
@@ -46,13 +53,13 @@ export class TransactionVo {
   accountId!: string;
 
   @ApiProperty({ example: { id: '0191…', name: '招商银行', type: 'bank' } })
-  account!: { id: string; name: string; type: string };
+  account!: AccountBrief;
 
   @ApiProperty({ nullable: true })
   categoryId!: string | null;
 
   @ApiProperty({ nullable: true, example: { id: '0191…', name: '餐饮', icon: 'utensils', color: '#f97316' } })
-  category!: { id: string; name: string; icon: string | null; color: string | null } | null;
+  category!: CategoryBrief | null;
 
   @ApiProperty()
   occurredAt!: string;
@@ -83,7 +90,8 @@ export class TransactionVo {
     vo.account = {
       id: bytesToUuid(row.accountId),
       name: row.account?.name ?? '',
-      type: row.account?.type ?? '',
+      // account 是必填关系，include 后必然存在；缺省仅用于降级不炸接口
+      type: (row.account?.type ?? 'cash') as AccountType,
     };
     vo.categoryId = row.categoryId ? bytesToUuid(row.categoryId) : null;
     vo.category = row.category
