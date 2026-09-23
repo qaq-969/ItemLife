@@ -2,8 +2,8 @@
  * 物品成本指标（设计报告 8.2）：以「流水分摊（body/fee/accessory） + 配件批次」为数据源，
  * 前后端共用同一套公式，避免口径漂移。
  *
- * 联动调整后本体价的来源改变（方案 §5.2）：优先取 Σ(body+fee 分摊)，没有分摊时回退到
- * 录入时手填的 purchasePriceMinor（回退价）。公式本身不变 —— 因为 body/fee 全额立即计入、
+ * 联动调整后本体价的来源改变（方案 §5.2）：有 body 分摊时取 Σbody 覆盖录入时手填的
+ * purchasePriceMinor（回退价），fee 恒为叠加项。公式本身不变 —— 因为 body/fee 全额立即计入、
  * accessory 未用部分挂库存，恒等式「持有成本 = 总支付 − 剩余库存」在所有场景下成立。
  */
 
@@ -40,15 +40,21 @@ export function heldDaysOf(purchaseDate: Date | string, today: Date = new Date()
   return days >= 1 ? days : 1;
 }
 
+/** Σ 各角色的流水分摊金额（分）。配件不在此列：它的钱走批次单价×数量。 */
+export interface AllocationSums {
+  bodyMinor: number;
+  feeMinor: number;
+}
+
 /** 依据 8.2 公式计算全部成本指标。 */
 export function costMetricsOf(input: {
-  /** 回退价：无 body/fee 分摊时启用 */
+  /** 录入时手填的本体价：仅在没有 body 分摊时才启用（回退价） */
   purchasePriceMinor: number;
-  /** Σ(body + fee 分摊)；有值时覆盖回退价，无值时回退 */
-  allocatedBaseMinor?: number | null;
   purchaseDate: Date | string;
   expectedLifespanDays?: number | null;
   accessories: CostAccessoryInput[];
+  /** Σ(body + fee) 分摊；body 有值时覆盖回退价，fee 始终叠加 */
+  allocations?: AllocationSums | null;
   /** 关联流水未分摊金额，仅原样带出（不计入任何指标） */
   unallocatedMinor?: number;
   today?: Date;
@@ -63,9 +69,9 @@ export function costMetricsOf(input: {
   );
   const remainingStockMinor = paidForAccessories - usedAccessories;
 
-  const base = input.allocatedBaseMinor && input.allocatedBaseMinor > 0
-    ? input.allocatedBaseMinor
-    : input.purchasePriceMinor;
+  const bodyMinor = input.allocations?.bodyMinor ?? 0;
+  const feeMinor = input.allocations?.feeMinor ?? 0;
+  const base = (bodyMinor > 0 ? bodyMinor : input.purchasePriceMinor) + feeMinor;
 
   const payTotalMinor = base + paidForAccessories;
   const holdCostMinor = base + usedAccessories;

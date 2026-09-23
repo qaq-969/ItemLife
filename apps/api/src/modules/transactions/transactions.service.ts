@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, Inject, Injectable, Logger, Not
 import type { Account, Category, Prisma, Transaction } from '@prisma/client';
 import {
   DEFAULT_CURRENCY,
+  formatMoney,
   isAllocationValid,
+  type AllocationRole,
   type Paginated,
   type TransactionSummaryDto,
   type TransactionType,
@@ -13,10 +15,12 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../common/redis/redis.module';
 import { OwnerScopeService, type OwnerScope } from '../../common/scope/owner-scope.service';
 import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/cursor';
-import { addDaysUtc, parseDateOnly, toDateOnlyString } from '../../common/utils/date';
+import { addDaysUtc, parseDateOnly, startOfDayUtc, toDateOnlyString } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
 import type {
   CreateTransactionDto,
+  InlineAccessoryDto,
+  InlineNewItemDto,
   ListTransactionsQueryDto,
   SummaryQueryDto,
   TransactionItemDto,
@@ -34,9 +38,26 @@ const TRANSACTION_INCLUDE = {
 const IDEMPOTENCY_TTL_SECONDS = 24 * 3600;
 const IDEMPOTENCY_LOCK_SECONDS = 60;
 
+/** 内联新建批次未填名称时的兜底名：与物品页「添加批次」保持一致。 */
+const DEFAULT_ACCESSORY_NAME = '配件';
+
+/** 分摊金额：null 表示继承整笔流水金额（单物品场景）。 */
+function effectiveAmount(row: ResolvedAllocation, transactionAmountMinor: number): number {
+  return row.amountMinor === null ? transactionAmountMinor : Number(row.amountMinor);
+}
+
 interface ResolvedAllocation {
-  itemId: IdBytes;
+  /** 已有物品；内联新建的行先为 null，落库后回填 */
+  itemId: IdBytes | null;
+  /** 引用同一笔流水内 newItem 键的临时引用 */
+  itemRef: string | null;
   amountMinor: bigint | null;
+  role: AllocationRole;
+  accessoryId: IdBytes | null;
+  newItem: InlineNewItemDto | null;
+  /** 内联物品的分类（已校验归属），落库时直接用 */
+  newItemCategoryId: IdBytes | null;
+  newAccessory: InlineAccessoryDto | null;
 }
 
 @Injectable()
@@ -144,7 +165,9 @@ export class TransactionsService {
     }
 
     const allocations =
-      !isTransfer && dto.items !== undefined ? await this.resolveAllocations(scope, dto.items, amount) : null;
+      !isTransfer && dto.items !== undefined
+        ? await this.resolveAllocations(scope, dto.items, amount, { currentTransactionId: row.id })
+        : null;
     const categoryId =
       !isTransfer && dto.categoryId !== undefined
         ? dto.categoryId === null
@@ -180,16 +203,9 @@ export class TransactionsService {
         });
         if (allocations) {
           await tx.transactionItem.deleteMany({ where: { transactionId: row.id } });
-          if (allocations.length > 0) {
-            await tx.transactionItem.createMany({
-              data: allocations.map((allocation) => ({
-                id: newId(),
-                transactionId: row.id,
-                itemId: allocation.itemId,
-                amountMinor: allocation.amountMinor,
-              })),
-            });
-          }
+          await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt));
+          await this.writeAllocations(tx, row.id, allocations);
+          await this.pinPurchaseTransactions(tx, row.id, allocations);
         }
       });
     }
@@ -293,10 +309,12 @@ export class TransactionsService {
     const categoryId = dto.categoryId
       ? (await this.requireCategory(scope, this.requireId(dto.categoryId), dto.type)).id
       : null;
-    const allocations = await this.resolveAllocations(scope, dto.items, dto.amountMinor);
+    const allocations = await this.resolveAllocations(scope, dto.items, dto.amountMinor, { allowInline: true });
     const id = newId();
+    const occurredDate = startOfDayUtc(occurredAt);
 
     await this.prisma.$transaction(async (tx) => {
+      await this.createInlineItems(tx, scope, id, allocations, occurredDate, dto.amountMinor);
       await tx.transaction.create({
         data: {
           id,
@@ -311,16 +329,9 @@ export class TransactionsService {
           createdBy: this.requireId(userId),
         },
       });
-      if (allocations.length > 0) {
-        await tx.transactionItem.createMany({
-          data: allocations.map((allocation) => ({
-            id: newId(),
-            transactionId: id,
-            itemId: allocation.itemId,
-            amountMinor: allocation.amountMinor,
-          })),
-        });
-      }
+      await this.settleAccessoryBatches(tx, id, allocations, occurredDate);
+      await this.writeAllocations(tx, id, allocations);
+      await this.pinPurchaseTransactions(tx, id, allocations);
     });
 
     this.audit.record('ledger.transaction.created', {
@@ -329,36 +340,234 @@ export class TransactionsService {
       type: dto.type,
       amountMinor: dto.amountMinor,
       accountId: bytesToUuid(account.id),
+      allocationCount: allocations.length,
     });
     return this.findById(scope, id);
   }
 
-  /** 物品分摊校验：Σ分摊 ≤ 金额；多物品必须逐项填写；物品必须在同一数据域内。 */
+  /** 内联新建物品：先落库拿到 id，再回填 itemRef 引用；本体价取本行的分摊金额。 */
+  private async createInlineItems(
+    tx: Prisma.TransactionClient,
+    scope: OwnerScope,
+    transactionId: IdBytes,
+    allocations: ResolvedAllocation[],
+    purchaseDate: Date,
+    amountMinor: number,
+  ): Promise<void> {
+    const created = new Map<string, IdBytes>();
+    for (const row of allocations) {
+      if (!row.newItem) continue;
+      const itemId = newId();
+      await tx.item.create({
+        data: {
+          id: itemId,
+          ...this.scopes.filter(scope),
+          name: row.newItem.name.trim(),
+          categoryId: row.newItemCategoryId,
+          purchaseDate,
+          purchasePriceMinor: BigInt(row.role === 'body' ? effectiveAmount(row, amountMinor) : 0),
+          expectedLifespanDays: row.newItem.expectedLifespanDays ?? null,
+          status: 'in_use',
+          note: row.newItem.note?.trim() || null,
+          purchaseTransactionId: transactionId,
+        },
+      });
+      row.itemId = itemId;
+      if (row.newItem.key) created.set(row.newItem.key, itemId);
+    }
+
+    for (const row of allocations) {
+      if (row.itemRef && !row.itemId) row.itemId = created.get(row.itemRef) ?? null;
+    }
+  }
+
+  /**
+   * 批次绑定：先解掉本笔流水原有的绑定（编辑时重建分摊），再新建批次或把已有批次指回本笔。
+   * 批次单价 × 总数 与分摊金额的一致性已在 resolveAllocations 校验过。
+   */
+  private async settleAccessoryBatches(
+    tx: Prisma.TransactionClient,
+    transactionId: IdBytes,
+    allocations: ResolvedAllocation[],
+    fallbackDate: Date,
+  ): Promise<void> {
+    await tx.itemAccessory.updateMany({ where: { transactionId }, data: { transactionId: null } });
+
+    for (const row of allocations) {
+      if (row.role !== 'accessory' || !row.itemId) continue;
+      const amount = effectiveAmount(row, Number(row.amountMinor ?? 0n));
+
+      if (row.newAccessory) {
+        const id = newId();
+        await tx.itemAccessory.create({
+          data: {
+            id,
+            itemId: row.itemId,
+            name: row.newAccessory.name?.trim() || DEFAULT_ACCESSORY_NAME,
+            unitPriceMinor: BigInt(amount / row.newAccessory.totalQty),
+            totalQty: row.newAccessory.totalQty,
+            purchasedAt: parseDateOnly(row.newAccessory.purchasedAt) ?? fallbackDate,
+            transactionId,
+          },
+        });
+        row.accessoryId = id;
+      } else if (row.accessoryId) {
+        await tx.itemAccessory.update({ where: { id: row.accessoryId }, data: { transactionId } });
+      }
+    }
+  }
+
+  private async writeAllocations(
+    tx: Prisma.TransactionClient,
+    transactionId: IdBytes,
+    allocations: ResolvedAllocation[],
+  ): Promise<void> {
+    if (allocations.length === 0) return;
+    await tx.transactionItem.createMany({
+      data: allocations.map((row) => ({
+        id: newId(),
+        transactionId,
+        itemId: row.itemId!,
+        amountMinor: row.amountMinor,
+        role: row.role,
+        accessoryId: row.accessoryId,
+      })),
+    });
+  }
+
+  /** 本体采购流水指针：只在物品尚未指向任何采购流水时写入，避免覆盖首次记录。 */
+  private async pinPurchaseTransactions(
+    tx: Prisma.TransactionClient,
+    transactionId: IdBytes,
+    allocations: ResolvedAllocation[],
+  ): Promise<void> {
+    for (const row of allocations) {
+      if (row.role !== 'body' || !row.itemId) continue;
+      await tx.item.updateMany({
+        where: { id: row.itemId, purchaseTransactionId: null },
+        data: { purchaseTransactionId: transactionId },
+      });
+    }
+  }
+
+  /**
+   * 物品分摊校验（联动调整方案 §5.3 / §5.4）：
+   * Σ分摊 ≤ 金额；多物品必须逐项填写；目标物品/批次必须同域；
+   * role=accessory 必须绑定批次，且「批次单价 × 总数 = 分摊金额」不符即 409。
+   */
   private async resolveAllocations(
     scope: OwnerScope,
     items: TransactionItemDto[] | undefined,
     amountMinor: number,
+    options: { allowInline?: boolean; currentTransactionId?: IdBytes } = {},
   ): Promise<ResolvedAllocation[]> {
     if (!items || items.length === 0) return [];
 
-    const seen = new Set<string>();
+    const allowInline = options.allowInline ?? false;
+    const seenItems = new Set<string>();
+    const seenRefs = new Set<string>();
+    const inlineKeys = new Set<string>();
     const parsed: ResolvedAllocation[] = [];
-    for (const item of items) {
-      const itemId = this.requireId(item.itemId);
-      const key = bytesToUuid(itemId);
-      if (seen.has(key)) {
-        throw new BadRequestException({ code: 'DUPLICATE_ITEM', message: '同一物品只能分摊一次' });
-      }
-      seen.add(key);
-      parsed.push({ itemId, amountMinor: item.amountMinor === null || item.amountMinor === undefined ? null : BigInt(item.amountMinor) });
-    }
 
-    const found = await this.prisma.item.findMany({
-      where: { ...this.scopes.filter(scope), id: { in: parsed.map((item) => item.itemId) }, deletedAt: null },
-      select: { id: true },
-    });
-    if (found.length !== parsed.length) {
-      throw new NotFoundException({ code: 'ITEM_NOT_FOUND', message: '物品不存在或无权访问' });
+    for (const raw of items) {
+      const targets = [raw.itemId, raw.itemRef, raw.newItem].filter((value) => value !== undefined && value !== null);
+      if (targets.length !== 1) {
+        throw new BadRequestException({
+          code: 'ALLOCATION_TARGET_INVALID',
+          message: '每行分摊必须且只能指定 itemId / itemRef / newItem 之一',
+        });
+      }
+      if (raw.newItem && !allowInline) {
+        throw new BadRequestException({
+          code: 'INLINE_CREATE_NOT_ALLOWED',
+          message: '编辑流水不支持内联新建物品或批次，请先在「物品」页录入',
+        });
+      }
+      if (raw.itemRef && !raw.itemRef.trim()) {
+        throw new BadRequestException({ code: 'ALLOCATION_TARGET_INVALID', message: 'itemRef 不能为空' });
+      }
+
+      if (raw.itemRef) {
+        if (!allowInline) {
+          throw new BadRequestException({
+            code: 'INLINE_CREATE_NOT_ALLOWED',
+            message: '编辑流水不支持内联新建物品或批次，请先在「物品」页录入',
+          });
+        }
+        if (seenRefs.has(raw.itemRef)) {
+          throw new BadRequestException({ code: 'DUPLICATE_ITEM', message: '同一物品只能分摊一次' });
+        }
+        seenRefs.add(raw.itemRef);
+      }
+
+      if (raw.newItem?.key) {
+        if (inlineKeys.has(raw.newItem.key)) {
+          throw new BadRequestException({ code: 'DUPLICATE_INLINE_KEY', message: '内联新建物品的临时键不能重复' });
+        }
+        inlineKeys.add(raw.newItem.key);
+      }
+
+      const itemId = raw.itemId ? this.requireId(raw.itemId) : null;
+      if (itemId) {
+        const key = bytesToUuid(itemId);
+        if (seenItems.has(key)) {
+          throw new BadRequestException({ code: 'DUPLICATE_ITEM', message: '同一物品只能分摊一次' });
+        }
+        seenItems.add(key);
+      }
+
+      const role: AllocationRole = raw.role ?? (raw.newItem ? 'body' : 'link');
+      const isInline = Boolean(raw.newItem) || Boolean(raw.itemRef);
+      if (isInline && role !== 'body' && role !== 'fee') {
+        throw new BadRequestException({
+          code: 'ALLOCATION_ROLE_INVALID',
+          message: '新建物品只能作为本体或附加费用入账',
+        });
+      }
+
+      const amount = raw.amountMinor === null || raw.amountMinor === undefined ? null : BigInt(raw.amountMinor);
+      if (role === 'accessory') {
+        if (!raw.accessoryId && !raw.newAccessory) {
+          throw new BadRequestException({
+            code: 'ACCESSORY_BATCH_REQUIRED',
+            message: '配件采购必须挂到具体批次：选择已有批次或当场新建',
+          });
+        }
+        if (raw.accessoryId && raw.newAccessory) {
+          throw new BadRequestException({ code: 'ACCESSORY_BATCH_CONFLICT', message: '已有批次与新建批次不能同时指定' });
+        }
+        if (raw.accessoryId && !itemId) {
+          throw new BadRequestException({
+            code: 'ACCESSORY_BATCH_INVALID',
+            message: '已有批次必须与 itemId 一起提交',
+          });
+        }
+        if (amount === null) {
+          throw new BadRequestException({
+            code: 'ALLOCATION_AMOUNT_REQUIRED',
+            message: '配件采购必须写明分摊金额',
+          });
+        }
+        if (raw.newAccessory) {
+          assertAccessoryAmountMatches(Number(amount), null, raw.newAccessory.totalQty);
+        }
+      } else if (raw.accessoryId || raw.newAccessory) {
+        throw new BadRequestException({
+          code: 'ACCESSORY_ROLE_INVALID',
+          message: '只有用途为「配件」的分摊才能挂批次',
+        });
+      }
+
+      parsed.push({
+        itemId,
+        itemRef: raw.itemRef?.trim() ?? null,
+        amountMinor: amount,
+        role,
+        accessoryId: raw.accessoryId ? this.requireId(raw.accessoryId) : null,
+        newItem: raw.newItem ?? null,
+        newItemCategoryId: null,
+        newAccessory: raw.newAccessory ?? null,
+      });
     }
 
     if (parsed.length > 1 && parsed.some((item) => item.amountMinor === null)) {
@@ -367,6 +576,17 @@ export class TransactionsService {
         message: '多个物品时必须逐项填写分摊金额，只有单物品可以留空继承整笔金额',
       });
     }
+
+    for (const row of parsed) {
+      if (row.itemRef && !inlineKeys.has(row.itemRef)) {
+        throw new BadRequestException({
+          code: 'ITEM_REF_UNKNOWN',
+          message: 'itemRef 未指向本笔流水中新建的物品',
+        });
+      }
+    }
+
+    await this.verifyAllocationTargets(scope, parsed, options);
 
     const allocations = parsed.map((item) => ({
       amountMinor: item.amountMinor === null ? null : Number(item.amountMinor),
@@ -378,6 +598,55 @@ export class TransactionsService {
       });
     }
     return parsed;
+  }
+
+  /** 目标存在性与同域校验：已有物品 / 已有批次 / 内联新建物品的分类。 */
+  private async verifyAllocationTargets(
+    scope: OwnerScope,
+    rows: ResolvedAllocation[],
+    options: { currentTransactionId?: IdBytes },
+  ): Promise<void> {
+    const itemIds = rows.flatMap((row) => (row.itemId ? [row.itemId] : []));
+    if (itemIds.length > 0) {
+      const found = await this.prisma.item.findMany({
+        where: { ...this.scopes.filter(scope), id: { in: itemIds }, deletedAt: null },
+        select: { id: true },
+      });
+      if (found.length !== itemIds.length) {
+        throw new NotFoundException({ code: 'ITEM_NOT_FOUND', message: '物品不存在或无权访问' });
+      }
+    }
+
+    for (const row of rows) {
+      if (row.newItem?.categoryId) {
+        row.newItemCategoryId = (await this.requireCategory(scope, this.requireId(row.newItem.categoryId), 'expense')).id;
+      }
+    }
+
+    const batchIds = rows.flatMap((row) => (row.accessoryId ? [row.accessoryId] : []));
+    if (batchIds.length === 0) return;
+
+    const batches = await this.prisma.itemAccessory.findMany({ where: { id: { in: batchIds } } });
+    const byId = new Map(batches.map((batch) => [bytesToUuid(batch.id), batch]));
+    for (const row of rows) {
+      if (!row.accessoryId) continue;
+      const batch = byId.get(bytesToUuid(row.accessoryId));
+      if (!batch) {
+        throw new NotFoundException({ code: 'ACCESSORY_NOT_FOUND', message: '配件批次不存在或无权访问' });
+      }
+      if (!row.itemId || bytesToUuid(batch.itemId) !== bytesToUuid(row.itemId)) {
+        throw new BadRequestException({ code: 'ACCESSORY_ITEM_MISMATCH', message: '配件批次不属于该物品' });
+      }
+      const boundTo = batch.transactionId ? bytesToUuid(batch.transactionId) : null;
+      const current = options.currentTransactionId ? bytesToUuid(options.currentTransactionId) : null;
+      if (boundTo && boundTo !== current) {
+        throw new ConflictException({
+          code: 'ACCESSORY_ALREADY_BOUND',
+          message: '该批次已绑定其他流水，不能重复挂账',
+        });
+      }
+      assertAccessoryAmountMatches(Number(row.amountMinor ?? 0n), Number(batch.unitPriceMinor), batch.totalQty);
+    }
   }
 
   private async requireAccount(scope: OwnerScope, id: IdBytes): Promise<Account> {
@@ -507,4 +776,33 @@ function transferImmutable(message: string): BadRequestException {
 
 function invalidRange(message = '日期格式不正确，应为 YYYY-MM-DD'): BadRequestException {
   return new BadRequestException({ code: 'INVALID_DATE_RANGE', message });
+}
+
+/**
+ * 批次金额一致性（Q9 定案：硬拦 409，不做静默纠正）。
+ * unitPriceMinor 为 null 表示批次当场新建、单价待反算，此时要求「金额 ÷ 数量」整除。
+ */
+function assertAccessoryAmountMatches(
+  amountMinor: number,
+  unitPriceMinor: number | null,
+  totalQty: number,
+): void {
+  if (unitPriceMinor === null) {
+    const remainder = amountMinor % totalQty;
+    if (remainder !== 0) {
+      throw new ConflictException({
+        code: 'ACCESSORY_AMOUNT_MISMATCH',
+        message: `金额 ${formatMoney(amountMinor)} ÷ ${totalQty} 个除不尽（余 ${formatMoney(remainder)}），请调整金额或数量`,
+      });
+    }
+    return;
+  }
+
+  const expected = unitPriceMinor * totalQty;
+  if (expected !== amountMinor) {
+    throw new ConflictException({
+      code: 'ACCESSORY_AMOUNT_MISMATCH',
+      message: `批次单价 × 总数 = ${formatMoney(expected)}，与本行分摊 ${formatMoney(amountMinor)} 不符（差 ${formatMoney(amountMinor - expected)}）`,
+    });
+  }
 }
