@@ -4,9 +4,9 @@
 
 ## 在线查看
 
-### [点击这里直接查看 ItemLife UI 页面](https://htmlpreview.github.io/?https://github.com/qaq-969/ItemLife/blob/beta-html-jl/index.html)
+### [点击这里直接查看 ItemLife UI 页面](https://qaq-969.github.io/ItemLife/)
 
-> 请使用上面的在线预览入口。直接点击仓库文件列表中的 `index.html`，GitHub 只会显示源代码，不会渲染页面。
+> 在线页面由 GitHub Pages 发布。直接点击仓库文件列表中的 `index.html`，GitHub 只会显示源代码，不会渲染页面。
 
 ## 当前设计
 
