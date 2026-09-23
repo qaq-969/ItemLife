@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ItemLife · 记物与记账联动调整方案（评审稿）</title>
+<style>
+  :root{
+    --c-bg:#f6f7f9; --c-card:#ffffff; --c-text:#1f2937; --c-text-2:#4b5563; --c-text-3:#6b7280;
+    --c-border:#e5e7eb; --c-border-2:#d1d5db;
+    --c-primary:#4f46e5; --c-primary-bg:#eef2ff; --c-primary-dk:#3730a3;
+    --c-green:#059669; --c-green-bg:#ecfdf5;
+    --c-amber:#b45309; --c-amber-bg:#fffbeb;
+    --c-red:#dc2626; --c-red-bg:#fef2f2;
+    --c-violet:#7c3aed; --c-violet-bg:#f5f3ff;
+    --c-cyan:#0891b2; --c-cyan-bg:#ecfeff;
+    --radius:10px; --radius-s:6px;
+    --shadow:0 1px 3px rgba(16,24,40,.06),0 1px 2px rgba(16,24,40,.04);
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--c-bg); color:var(--c-text); font-size:15px; line-height:1.75;
+    -webkit-font-smoothing:antialiased;
+  }
+  .cover{
+    background:linear-gradient(135deg,#312e81 0%,#4f46e5 55%,#7c3aed 100%);
+    color:#fff; padding:56px 24px 48px; position:relative; overflow:hidden;
+  }
+  .cover::after{content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;border-radius:50%;background:rgba(255,255,255,.07)}
+  .cover::before{content:"";position:absolute;left:-80px;bottom:-160px;width:320px;height:320px;border-radius:50%;background:rgba(255,255,255,.05)}
+  .cover-inner{max-width:1120px;margin:0 auto;position:relative;z-index:1}
+  .cover .badge{display:inline-block;font-size:12.5px;letter-spacing:.06em;padding:4px 12px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);margin-bottom:16px}
+  .cover h1{font-size:clamp(24px,4vw,36px);font-weight:700;line-height:1.32}
+  .cover .sub{margin-top:12px;font-size:clamp(14px,2vw,16.5px);color:rgba(255,255,255,.86)}
+  .cover .meta{margin-top:24px;display:flex;flex-wrap:wrap;gap:8px 26px;font-size:13.5px;color:rgba(255,255,255,.9)}
+  .layout{max-width:1120px;margin:0 auto;padding:32px 24px 80px}
+  section{background:var(--c-card);border:1px solid var(--c-border);border-radius:var(--radius);padding:26px 30px;margin-bottom:24px;box-shadow:var(--shadow)}
+  section > h2{font-size:20px;font-weight:700;padding-bottom:12px;margin-bottom:18px;border-bottom:2px solid var(--c-primary-bg);display:flex;align-items:baseline;gap:10px}
+  section > h2 .no{font-size:13px;font-weight:700;color:#fff;background:var(--c-primary);border-radius:6px;padding:2px 9px;flex:none;transform:translateY(-2px)}
+  h3{font-size:16px;font-weight:700;margin:24px 0 10px}
+  h4{font-size:14.5px;font-weight:700;margin:16px 0 8px;color:var(--c-text-2)}
+  p{margin:8px 0;color:var(--c-text-2)}
+  ul,ol{margin:8px 0 8px 22px;color:var(--c-text-2)}
+  li{margin:4px 0}
+  strong{color:var(--c-text)}
+  code{font-family:var(--mono);font-size:12.8px;background:#f1f5f9;border:1px solid var(--c-border);border-radius:4px;padding:1px 5px;color:#334155}
+  .tbl-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--c-border);border-radius:var(--radius-s)}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+  th{background:#f8fafc;text-align:left;font-weight:700;padding:9px 12px;border-bottom:1px solid var(--c-border-2);white-space:nowrap}
+  td{padding:8px 12px;border-bottom:1px solid var(--c-border);color:var(--c-text-2);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#fafbfc}
+  td code{white-space:nowrap}
+  .tag{display:inline-block;font-size:11.5px;font-weight:700;padding:1.5px 8px;border-radius:999px;line-height:1.6;white-space:nowrap}
+  .tag-rec{background:var(--c-green-bg);color:var(--c-green);border:1px solid #a7f3d0}
+  .tag-alt{background:#f1f5f9;color:#475569;border:1px solid var(--c-border-2)}
+  .tag-risk{background:var(--c-red-bg);color:var(--c-red);border:1px solid #fecaca}
+  .tag-q{background:var(--c-amber-bg);color:var(--c-amber);border:1px solid #fde68a}
+  .tag-info{background:var(--c-cyan-bg);color:var(--c-cyan);border:1px solid #a5f3fc}
+  .box{border-radius:var(--radius-s);padding:13px 16px;margin:14px 0;font-size:13.8px;border:1px solid}
+  .box p{margin:4px 0}
+  .box-info{background:#f0f9ff;border-color:#bae6fd;color:#0c4a6e}
+  .box-warn{background:var(--c-amber-bg);border-color:#fde68a;color:#78350f}
+  .box-danger{background:var(--c-red-bg);border-color:#fecaca;color:#7f1d1d}
+  .box-ok{background:var(--c-green-bg);border-color:#a7f3d0;color:#064e3b}
+  .formula{font-family:var(--mono);font-size:13.5px;background:#0f172a;color:#e2e8f0;border-radius:var(--radius-s);padding:14px 18px;margin:12px 0;overflow-x:auto;line-height:2}
+  .formula .hl{color:#7dd3fc}
+  .formula .cm{color:#64748b}
+  pre.code{font-family:var(--mono);font-size:12.6px;line-height:1.7;background:#0f172a;color:#e2e8f0;border-radius:var(--radius-s);padding:16px 18px;overflow-x:auto;margin:12px 0}
+  pre.code .c{color:#64748b}
+  pre.code .s{color:#7dd3fc}
+  .grid{display:grid;gap:14px;margin:14px 0}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .cell{border:1px solid var(--c-border);border-radius:var(--radius-s);padding:14px 16px;background:#fcfcfd}
+  .cell h5{font-size:13.5px;font-weight:700;margin-bottom:6px}
+  .cell p{font-size:13px;margin:3px 0}
+  .cell .kpi{font-size:22px;font-weight:800;color:var(--c-primary);font-variant-numeric:tabular-nums}
+  .cell.bad{background:var(--c-red-bg);border-color:#fecaca}
+  .cell.good{background:var(--c-green-bg);border-color:#a7f3d0}
+  /* 流程图 */
+  .flow{display:flex;flex-direction:column;gap:10px;margin:16px 0}
+  .flow-node{border:1px solid var(--c-border-2);border-radius:var(--radius-s);padding:12px 16px;background:#fcfcfd;font-size:13.5px}
+  .flow-node b{display:block;font-size:13.5px;margin-bottom:2px}
+  .flow-node .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--c-primary-dk);font-weight:700}
+  .flow-node.src{border-left:4px solid var(--c-primary);background:var(--c-primary-bg)}
+  .flow-node.derived{border-left:4px solid var(--c-cyan);background:var(--c-cyan-bg)}
+  .flow-arrow{text-align:center;color:var(--c-text-3);font-size:12.5px;font-family:var(--mono)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .steps{counter-reset:s;list-style:none;margin-left:0}
+  .steps li{counter-increment:s;position:relative;padding-left:34px;margin:8px 0}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:2px;width:22px;height:22px;border-radius:50%;background:var(--c-primary-bg);color:var(--c-primary-dk);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1px solid #c7d2fe}
+  .pill{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:4px;background:#f1f5f9;color:#475569;border:1px solid var(--c-border-2);font-family:var(--mono)}
+  .muted{color:var(--c-text-3);font-size:12.8px}
+  @media (max-width:760px){
+    .g2,.g3,.split{grid-template-columns:1fr}
+    section{padding:20px 16px}
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-inner">
+    <span class="badge">调整方案 · 评审稿</span>
+    <h1>记物与记账的联动调整方案</h1>
+    <p class="sub">让「一笔采购」只录一次：流水负责记钱，物品负责记用法</p>
+    <div class="meta">
+      <span>基线：<b>beta-czw 5eb6329</b>（M1 / M2 / M3 已完成）</span>
+      <span>日期：<b>2026-09-23</b></span>
+      <span>状态：<b>待拍板 Q7–Q9</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+
+<!-- ============================================================ -->
+<section id="s1">
+  <h2><span class="no">01</span>一句话结论</h2>
+  <p>现在这套系统里，<strong>同一笔花出去的钱，被要求在两处分别登记，而这两处之间没有任何绑定关系</strong>：物品档案自己存一份「本体价」，流水自己存一份「金额」，谁也不会替谁核对。用户录完物品还得再去「记一笔」重录一遍金额，数字对不上时系统一声不吭。</p>
+  <p>建议调整为：<strong>「记一笔」是花钱的唯一入口，物品的成本从它派生</strong>；物品侧只保留「这东西怎么用、用了多少」，不再单独保管一份金额。配件库存的语义顺带被厘清——它是「已经付了钱、但还没用掉」的那部分。</p>
+  <div class="box box-ok">
+    <p><b>收益：</b>买牙刷 + 刷头这套动作，从「录物品 → 再去记一笔 → 手动保证两个金额一致」变成<strong>一次录入</strong>；物品的「总支付金额」与关联流水的金额<strong>按构造相等</strong>，不再需要用户人工对账。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s2">
+  <h2><span class="no">02</span>现状：一件事，两条互不相干的链路</h2>
+  <p>以设计报告第 12 章的验收用例「牙刷 ¥400 + 12 个刷头（¥20/个，已用 2 个）」为例，当前用户必须这样做：</p>
+  <ol class="steps">
+    <li>底栏「＋记一笔」→ 支出 ¥400 → 选账户、分类 → 保存。<span class="muted">（账户余额 −400 ✓）</span></li>
+    <li>底栏「物品」→「录入物品」→ 再手输一次本体价 <b>400</b>、购买日期、预期寿命。</li>
+    <li>同一页再加一行配件批次：名称「替换刷头」、单价 <b>20</b>、总数 <b>12</b>、已用 <b>2</b>。<span class="muted">（12×20=240 的这笔钱，账户里还没有对应流水）</span></li>
+    <li>要补上刷头的账，再回「记一笔」录一笔 ¥240——此时系统<strong>不会</strong>提示这条流水跟刚才那 12 个刷头有关系。</li>
+  </ol>
+  <p>结果是同一个物品在详情页上同时存在两套数字：</p>
+  <div class="grid g2">
+    <div class="cell">
+      <h5>物品卡片（由本体价 + 配件批次算出）</h5>
+      <p class="kpi">¥640.00</p>
+      <p class="muted">总支付金额 = 400 + 12×20；当前持有 ¥440.00</p>
+    </div>
+    <div class="cell">
+      <h5>关联流水区（由 transaction_items 反查）</h5>
+      <p class="kpi" style="color:var(--c-text-2)">¥400.00</p>
+      <p class="muted">只有本体那一笔（如果用户记了）；刷头那 240 元不在这里</p>
+    </div>
+  </div>
+  <p>两个数字都对，但没有一个机制保证它们一致：用户如果手滑把本体价填成 380，或漏记刷头流水，系统会一直保持沉默。这就是「混乱」的直观来源。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s3">
+  <h2><span class="no">03</span>五处具体症状（逐条可核对）</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:190px">设计报告怎么写的</th><th style="width:300px">代码实际怎么做的</th><th>用户感受到的困惑</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>§8.2 第 4 条：<br>「新建物品时<strong>可直接生成一条关联支出流水</strong>（分摊金额 = 本体价），也可事后关联已有流水」<span class="muted">（报告 1092 行）</span></td>
+          <td><code>ItemsService.create</code> 只写 <code>items</code> 与配件批次，完全不碰 <code>transactions</code><br><span class="muted">items.service.ts:129-166</span></td>
+          <td>录完物品，账户余额一动不动；必须在两个 Tab 之间来回录同一件事</td>
+        </tr>
+        <tr>
+          <td>§8.2 第 5 条：<br>「购买配件 = 一条支出流水（分摊指向该物品）+ 在 <code>item_accessories</code> 增加一批库存」<span class="muted">（报告 1093 行）</span></td>
+          <td><code>item_accessories.transaction_id</code> 字段存在，但<strong>前端没有任何入口能填它</strong>：录入物品的批次行只有名称/单价/总数/已用，详情页「添加批次」弹层也没有流水选择</td>
+          <td>买刷头的钱只能记成一笔与物品无关的普通支出；批次上的「关联流水」永远是空的</td>
+        </tr>
+        <tr>
+          <td>§6.3 物品详情返回 <code>cost.unallocated_minor</code>（未分摊金额 = 关联流水总额 − Σ分摊）<span class="muted">（报告 917 行）</span></td>
+          <td>全仓库检索 <code>unallocated</code>：<strong>只在这个 HTML 里出现过</strong>，代码与共享包里都没有</td>
+          <td>报告承诺的「未分摊提示」从未存在过</td>
+        </tr>
+        <tr>
+          <td>§8.2 公式 ①：<br><code>pay_total = item.purchase_price + Σ(配件单价 × 总数)</code></td>
+          <td>按此实现（<code>packages/shared/src/cost.ts</code>），口径清晰</td>
+          <td>但下一屏的「关联流水」用的是另一套金额；用户不知道「640」和「400」哪个才是自己花掉的钱</td>
+        </tr>
+        <tr>
+          <td>§5.2⑧ <code>transaction_items</code>：<br>「物品详情页的关联流水时间线由本表反查生成」</td>
+          <td>按此实现，但分摊被明确定义为「仅追溯」——<code>NewTransactionView.vue:343</code> 的提示原文是「成本指标仍由物品采购价与配件批次计算」</td>
+          <td>界面上在向用户解释一个反直觉的设计：「你填的分摊金额，不参与成本计算」</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s4">
+  <h2><span class="no">04</span>根因</h2>
+  <div class="grid g3">
+    <div class="cell bad">
+      <h5>① 事实来源重复</h5>
+      <p>同一笔钱同时存在于 <code>items.purchase_price_minor</code> 和 <code>transactions.amount_minor</code>，两个可写字段、两处录入。</p>
+    </div>
+    <div class="cell bad">
+      <h5>② 缺「绑定」这一层</h5>
+      <p><code>transaction_items</code> 只是弱引用（可空金额、仅用于展示），它不是「这笔钱就是这个物品的成本」的<strong>声明</strong>。</p>
+    </div>
+    <div class="cell bad">
+      <h5>③ 报告自身口径打架</h5>
+      <p>§8.2 公式基于物品档案，§6.3 示例却按流水算未分摊额。实现只能二选一，另一处变成孤儿。</p>
+    </div>
+  </div>
+  <p>另外还有一处小口径冲突：报告 §5.2⑧ 举的分摊例子是「牙刷 ¥400 + 12 个刷头 ¥240」，但刷头在设计上是<strong>配件（accessory）</strong>而不是物品（item），当前的 <code>transaction_items</code> 只能指向 item——也就是说，<strong>系统目前根本无法表达「这一笔 ¥640 里，240 是买刷头的钱」</strong>。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s5">
+  <h2><span class="no">05</span>目标模型（推荐方案 A）</h2>
+  <h3>5.1 一张图</h3>
+  <div class="flow">
+    <div class="flow-node src">
+      <b>① 采购流水（唯一事实来源）</b>
+      支出 <span class="amt">¥640.00</span> · 账户「信用卡」· 分类「日用百货」· 2026-06-16
+      <div class="muted">用户在「记一笔」里录入的唯一一份金额</div>
+    </div>
+    <div class="flow-arrow">▼ 分摊（transaction_items，带 role）</div>
+    <div class="split">
+      <div class="flow-node derived">
+        <b>② 本体分摊</b>
+        <span class="amt">¥400.00</span> → 物品「电动牙刷」
+      </div>
+      <div class="flow-node derived">
+        <b>③ 配件分摊</b>
+        <span class="amt">¥240.00</span> → 配件批次「替换刷头 12 个」
+        <div class="muted">单价 ¥20 = 240 ÷ 12 由系统算出，不用手填</div>
+      </div>
+    </div>
+    <div class="flow-arrow">▼ 使用 2 个（物品侧的动作，与钱无关）</div>
+    <div class="flow-node">
+      <b>④ 配件库存</b>
+      剩余 <span class="amt">¥200.00</span>（已付、未用）
+      <div class="muted">持有成本 ¥440.00 = ¥640.00 − ¥200.00</div>
+    </div>
+  </div>
+
+  <h3>5.2 三条规则</h3>
+  <ol>
+    <li><strong>R1 · 花钱只在一处发生。</strong>任何一笔支出都只作为流水存在；物品与配件批次不再单独保管金额，只保管「用掉了多少」。</li>
+    <li><strong>R2 · 物品的钱 = 分摊到它的流水之和。</strong>一笔流水可拆给本体、配件或多个物品；同一物品也可以有多笔流水（本体首购 + 配件补货 + 同款再买）。</li>
+    <li><strong>R3 · 成本公式不变。</strong>设计报告 §8.2 的五个指标原样保留，只是公式里 <code>purchase_price</code> 这个变量的来源，从「用户手填」改为「Σ 本体分摊」。</li>
+  </ol>
+
+  <h3>5.3 两个可自动校验的不变量</h3>
+  <div class="formula">
+① <span class="hl">pay_total</span>       = Σ(绑定到本物品的全部分摊：本体 + 配件)<br>
+② <span class="hl">remaining_stock</span> = Σ(配件.单价 × (总数 − 已用数))<br>
+③ <span class="hl">hold_cost</span>       = pay_total − remaining_stock　<span class="cm">← 与 §8.2「本体 + 已用配件」恒等</span>
+  </div>
+  <p>等式 ③ 值得单独说一句：它把「总支付」和「持有成本」变成了<strong>同一根数轴的两端</strong>——付出去的钱，减去还没用掉的部分，就是「到现在真正花在这件东西上的钱」。这句话既是成本口径的自然解释，也是可以直接写进冒烟断言的一致性校验。</p>
+  <div class="box box-info">
+    <p><b>「不挂流水的物品」仍然允许。</b>别人送的、或者只想记个价看日均成本的东西，可以不关联任何流水；此时成本退回用手填的本体价计算，详情页打一个明确标记「未关联流水 · 金额为手填」，并提供一键补记入口。这是兼容历史数据的必要退路，也让方案 A 保持了灵活性。</p>
+  </div>
+
+  <h3>5.4 钱的五种去向：同一个「记一笔」怎么承接五种意图</h3>
+  <p>方案 A 的落点不在新增页面，而在 <code>transaction_items.role</code> 这一个字段上——<strong>一份金额、五种语义</strong>。记一笔的主表单（金额 / 账户 / 分类 / 时间 / 备注）<strong>五个场景下完全一样</strong>，区别只在下方「物品归属」区块里加了什么。</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th style="width:112px">场景</th><th style="width:250px">用户在「记一笔」里做的动作</th><th style="width:96px">role</th><th style="width:96px">进总支付</th><th style="width:126px">进持有成本</th><th>产生库存</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>① 普通账</strong><br><span class="muted">午饭 ¥30</span></td>
+          <td>什么都不用做：填金额 + 选分类 → 保存（默认路径，零额外操作）</td>
+          <td><span class="pill">—</span></td><td>—</td><td>—</td><td>—</td>
+        </tr>
+        <tr>
+          <td><strong>② 新物品</strong><br><span class="muted">牙刷 ¥400</span></td>
+          <td>点「这是一件新物品」→ 内联填名称 / 分类 / 预期寿命 → 保存</td>
+          <td><span class="pill">body</span></td><td>✓ 全额</td><td>✓ 全额</td><td>—</td>
+        </tr>
+        <tr>
+          <td><strong>③ 耗材</strong><br><span class="muted">12 个刷头 ¥240</span></td>
+          <td>点「记到已有物品」→ 选物品 → 用途选「配件」→ 填总数 12（单价由系统反算 ¥20/个）</td>
+          <td><span class="pill">accessory</span></td><td>✓ 全额</td><td>✓ 仅已用部分</td><td>✓ 未用部分</td>
+        </tr>
+        <tr>
+          <td><strong>④ 附加费用</strong><br><span class="muted">换电池 ¥50 / 运费 ¥12</span></td>
+          <td>点「记到已有物品」→ 选物品 → 用途选「附加费用」</td>
+          <td><span class="pill">fee</span></td><td>✓ 全额</td><td>✓ 全额</td><td>—</td>
+        </tr>
+        <tr>
+          <td><strong>⑤ 仅关联</strong><br><span class="muted">不想影响成本</span></td>
+          <td>点「记到已有物品」→ 选物品 → 用途选「仅关联」</td>
+          <td><span class="pill">link</span></td><td>—</td><td>—</td><td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="split">
+    <div class="cell">
+      <h5>记一笔的表单长这样（以 ¥640 采购为例）</h5>
+      <pre class="code">支出   ¥ 640.00
+账户 [信用卡 ▾]   分类 [日用百货 ▾]   时间 [2026-06-16]
+
+这笔钱算在哪些物品上？
+ ┌────────────────────────────────────────────────┐
+ │ [电动牙刷 ▾] 用途[本体 ▾]           ¥400.00  ✕ │
+ │ [电动牙刷 ▾] 用途[配件 ▾] → 新建批次            │
+ │              替换刷头 × 12          ¥240.00  ✕ │
+ └────────────────────────────────────────────────┘
+ [+ 记到已有物品]   [+ 这是一件新物品]
+ 合计 ¥640.00 · 未分摊 ¥0.00</pre>
+    </div>
+    <div class="cell">
+      <h5>成本角度其实只有两种行为</h5>
+      <p><b>全额立即计入</b>：<code>body</code>、<code>fee</code> —— 钱花出去就变成「持有成本」，没有库存形态。</p>
+      <p><b>先计总支付、未用部分挂库存</b>：<code>accessory</code> —— 买了 12 个只用 2 个，另外 10 个还值 ¥200，不算「已经花在这件东西上」。</p>
+      <p class="muted">所以恒等式 <code>hold_cost = pay_total − remaining_stock</code> 对五种情形全部成立，§8.2 的公式一个字都不用改。</p>
+    </div>
+  </div>
+
+  <div class="formula">
+① <span class="hl">pay_total</span>       = Σbody + Σfee + Σaccessory(单价 × 总数)<br>
+② <span class="hl">remaining_stock</span> = Σaccessory(单价 × (总数 − 已用数))<br>
+③ <span class="hl">hold_cost</span>       = pay_total − remaining_stock　<span class="cm">← 加 fee 后恒等式依然成立</span>
+  </div>
+
+  <div class="box box-info">
+    <p><b>「分类」和「物品归属」是两个并行维度，不是重复记账。</b></p>
+    <p>· <strong>分类</strong>（日用百货 / 餐饮 / 维修）回答「这笔钱花在什么性质的事上」——账本的基本维度，任何流水都要有（转账除外）；</p>
+    <p>· <strong>物品归属</strong>（body / accessory / fee / link）回答「这笔钱该摊到哪件东西头上」——成本归集维度，永远可选。</p>
+    <p>同一笔 ¥640 会同时出现在「本月消费 +640」（分类口径）和「该物品总支付 +640」（物品口径）。这不是重复计算，是<strong>同一笔钱的两种视图</strong>；物品详情页与流水列表互相标注来源流水，可双向跳转核对。</p>
+  </div>
+
+  <h3>5.5 成本演进折线要跟着扩一处输入</h3>
+  <p>现在的台阶只来自「配件使用 / 撤销」（<code>accessory_usages</code>）。加入 body / fee 流水后，<strong>每一笔成本类流水的发生日也应在曲线上落一个台阶</strong>（首次采购日就是折线起点）。这样「第 200 天换电池 ¥50」会在图上直观抬起一格，日均持有成本随之从 ¥4.40 变为 ¥4.90——用户能一眼看出「这笔附加费用把日均推高了多少」。</p>
+
+  <div class="box box-warn">
+    <p><b>三条边界，方案里先说清楚：</b></p>
+    <p>· <b>耗材还是附加费用？</b>判定规则：<b>有「个数」、会分次使用、关心还剩几个</b>的走「配件」（有剩余价值，更精确）；<b>花掉就没了、不关心剩几个</b>的走「附加费用」。系统不替用户猜，两个选项都摆在用途下拉里；选错了可在物品详情页改归类。</p>
+    <p>· <b>退款 / 退货：</b>v1.0 不支持负数分摊。退货请在物品详情页解除或修改该笔关联流水，或直接删掉这笔流水，成本随之回落；<code>role=refund</code> + 负分摊列为 v1.1 候选。</p>
+    <p>· <b>别人送的 / 不想记钱：</b>不关联任何流水，成本退回手填价并标记「未关联流水」。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s6">
+  <h2><span class="no">06</span>交互调整（四个页面）</h2>
+
+  <h3>6.1 记一笔：主表单不动，只在下方加「物品归属」</h3>
+  <p>五个场景（普通账 / 新物品 / 耗材 / 附加费用 / 仅关联）共用同一个页面，逐行展开见 <a href="#s5">§5.4</a>。要点是<strong>默认路径零额外操作</strong>：不碰物品区块，就是一笔普通账。</p>
+  <p>「物品归属」区块由两条按钮驱动，每加一行就是一条 <code>transaction_items</code>：</p>
+  <div class="grid g3">
+    <div class="cell good">
+      <h5>「记到已有物品」</h5>
+      <p>新增一行：<b>选物品</b> → <b>选用途</b>（本体追加 / 配件补货 / 附加费用 / 仅关联）→ 填金额。</p>
+      <p class="muted">选「配件」时会展开批次选择：挑已有批次，或当场新建一个（填总数，单价由「金额 ÷ 总数」反算）。</p>
+    </div>
+    <div class="cell good">
+      <h5>「这是一件新物品」</h5>
+      <p>内联展开小表单：名称 / 分类 / 预期寿命，金额自动带入该行。</p>
+      <p class="muted">保存后流水与物品一起落库，物品的购买日期直接取流水发生日期，不用再手填。</p>
+    </div>
+    <div class="cell good">
+      <h5>什么都不点</h5>
+      <p>普通账。金额 + 分类 → 保存，与今天完全一致。</p>
+      <p class="muted">现有用户的操作习惯不受任何影响。</p>
+    </div>
+  </div>
+  <p>一笔流水可以混合多种去向，例如超市一笔 ¥730 拆成：新建物品「电动牙刷」本体 ¥400 + 该物品刷头补货 ¥240 + 已有物品「洗发水」追加 ¥30 + 未分摊 ¥60。未分摊部分照旧在详情页标注。</p>
+
+  <h3>6.2 录入物品：加「这笔钱记过没有」</h3>
+  <pre class="code"><span class="c">// 录入物品页顶部二选一（默认第一项）</span>
+( ) 同时记一笔支出    账户 [信用卡 ▾]  日期 [2026-06-16]  分类 [日用百货 ▾]
+( ) 已经在别处记过    从最近流水中选择 [ 超市采购 ¥640 · 09-20 ▾ ]  <span class="c">/ 暂不关联</span></pre>
+  <p>选第一项：保存后一条流水 + 一个物品同时落库，双向绑定，两边金额按构造相等。<br>
+     选第二项：绑定已有流水，系统自动取该流水的分摊金额作为本体价。<br>
+     都不选（暂不关联）：保留手填价，详情页标记「未关联流水」。</p>
+
+  <h3>6.3 物品详情：把两套数字合并成一条主线</h3>
+  <div class="split">
+    <div class="cell bad">
+      <h5>现在</h5>
+      <p>· 总支付 ¥640.00（手填的本体价 + 配件）</p>
+      <p>· 关联流水 −¥400.00（另一套数字）</p>
+      <p class="muted">两者无关联，靠用户自己理解</p>
+    </div>
+    <div class="cell good">
+      <h5>调整后</h5>
+      <p>· 总支付 ¥640.00 <span class="pill">= 采购流水合计 ✓</span></p>
+      <p>· 构成：本体 ¥400.00（流水 #1）+ 刷头 12×¥20 ¥240.00（流水 #1）</p>
+      <p>· 已用 2 个 → 持有成本 ¥440.00，剩余库存 ¥200.00</p>
+    </div>
+  </div>
+  <p>没有流水的部分标黄并给补记入口；流水金额与分摊不一致（历史数据）时显示差额，而不是静默。</p>
+
+  <h3>6.4 配件批次：入库时可挂流水</h3>
+  <p>详情页「添加批次」弹层增加可选块：</p>
+  <ul>
+    <li>「同时记一笔支出」→ 填总数 + 总额，系统反算单价（¥240 ÷ 12 = ¥20/个），并生成一笔支出流水；</li>
+    <li>「已记过，选择流水」→ 从最近支出中挑一条，取其分摊金额反算单价；</li>
+    <li>「暂不关联」→ 维持现状（手填单价），批次上标记「未关联流水」。</li>
+  </ul>
+  <div class="box box-warn">
+    <p><b>一致性校验：</b>当批次绑定流水后，若 <code>单价 × 总数 ≠ 该批次的分摊金额</code>，服务端返回 409 并说明差额，而不是默默接受两套数字。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s7">
+  <h2><span class="no">07</span>数据模型改动（只加不删）</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:230px">表 / 字段</th><th style="width:120px">改动</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>transaction_items.role</code></td><td>新增 <code>ENUM</code></td><td><code>body</code> 本体采购 / <code>fee</code> 附加费用 / <code>accessory</code> 配件采购 / <code>link</code> 一般关联（默认值，兼容现有数据）</td></tr>
+        <tr><td><code>transaction_items.accessory_id</code></td><td>新增 <code>BINARY(16) NULL</code></td><td>配件分摊指向具体批次；为 NULL 时该分摊属于物品本体或一般关联</td></tr>
+        <tr><td><code>items.purchase_transaction_id</code></td><td>新增 <code>BINARY(16) NULL</code></td><td>首个本体采购流水的快捷指针（详情页跳转用）；真正的成本来源仍是分摊表求和，避免单点依赖</td></tr>
+        <tr><td><code>item_accessories.transaction_id</code></td><td>启用（字段已在）</td><td>批次 → 采购流水；配套 <code>transaction_items.accessory_id</code> 双向可查</td></tr>
+        <tr><td><code>items.purchase_price_minor</code></td><td>语义降级</td><td>不再作为主口径，改称「回退价」：仅当物品未关联任何流水时参与计算；<strong>字段保留，历史数据零迁移</strong></td></tr>
+        <tr><td><code>cost.unallocated_minor</code></td><td>补实现</td><td>把报告 §6.3 承诺过的字段落地：物品关联流水中未被分摊给任何物品的金额</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="box box-info">
+    <p><b>为什么成本来源是「分摊表求和」而不是 <code>items.purchase_transaction_id</code>：</b>同款物品买第二次、配件分批补货，都会产生多笔流水；指针只能记住第一笔。指针仅用于跳转，金额一律以分摊表为准。</p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="s8">
+  <h2><span class="no">08</span>实施路径（三步，每步都可独立交付与验收）</h2>
+  <div class="grid g3">
+    <div class="cell">
+      <h5>Step 1 · 只加不删</h5>
+      <p>加字段与迁移；前端补三处入口（记一笔新建物品、录入物品同步记账、批次挂流水）；详情页显示「已关联 / 未关联流水」标记。</p>
+      <p class="muted">老数据零影响，可随时回滚</p>
+    </div>
+    <div class="cell">
+      <h5>Step 2 · 切口径</h5>
+      <p>CostService 的输入源改为「有绑定用分摊之和，无绑定用回退价」；成本演进折线的台阶来源补上「body / fee 流水的发生日」；两条不变量写进 <code>smoke:items</code>；物品详情页把两套数字合并成一条主线。</p>
+      <p class="muted">此步完成后，混乱感才真正消失</p>
+    </div>
+    <div class="cell">
+      <h5>Step 3 · 收口</h5>
+      <p>把回退价在 UI 上标注为「仅历史/未关联时使用」；新物品默认走流水创建；同步修订设计报告 §6.3 与 §8.2 的措辞，消除口径打架。</p>
+    </div>
+  </div>
+  <p>回归基线不受影响：现有 <code>smoke:items</code> 57 项中，凡是「无绑定流水」的用例应当继续绿（走回退价），这正是 Step 2 的验收标准——<strong>老数据一个数不变</strong>。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s9">
+  <h2><span class="no">09</span>备选方案与取舍</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:150px">方案</th><th style="width:330px">做法</th><th>评价</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>A · 流水为事实来源</strong><br><span class="tag tag-rec">推荐</span></td>
+          <td>一处录钱，物品派生；成本公式保留，变量来源改为分摊之和</td>
+          <td>根治「录两遍」；顺带让一笔流水能表达「本体 + 配件」的拆分；代价是要加三个字段与迁移</td>
+        </tr>
+        <tr>
+          <td><strong>B · 双轨 + 对账提示</strong><br><span class="tag tag-alt">最小改动</span></td>
+          <td>模型不动，只在物品详情页显示「物品价 ¥400 vs 关联流水 ¥380，差 ¥20」并给补齐按钮</td>
+          <td>改动最小、一周内可完成；但两处录两遍的根因仍在，用户依旧要在两个 Tab 之间搬运同一个数字</td>
+        </tr>
+        <tr>
+          <td><strong>C · 物品为唯一入口</strong><br><span class="tag tag-alt">反向</span></td>
+          <td>「记一笔」里去掉物品选择；买物品一律从物品页走，自动生成流水</td>
+          <td>与报告 §8.2 的核心用例冲突：一笔超市采购要拆到多个物品上，从物品页发起会让这笔流水被某个物品「独占」；且日常小额消费被迫建物品</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>三个方案可以组合：<strong>先做 B 的对账提示（1 天）作为过渡，再实施 A</strong>。B 的提示逻辑在 A 落地后正好变成「未关联流水」的兜底展示，不会白做。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s10">
+  <h2><span class="no">10</span>影响面</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th style="width:130px">层</th><th>改动清单</th></tr></thead>
+      <tbody>
+        <tr><td><strong>数据库</strong></td><td>1 个迁移：<code>transaction_items</code> 加两列 + <code>items</code> 加一列（全部可空，无数据回填）</td></tr>
+        <tr><td><strong>后端</strong></td><td><code>ItemsService.create/update</code>（可选同步记账 + 绑定）、<code>TransactionsService.resolveAllocations</code>（role / accessoryId 校验：role 与金额、配件归属的一致性）、<code>CostService</code>（输入源优先级）、<code>unallocated_minor</code> 补实现</td></tr>
+        <tr><td><strong>共享包</strong></td><td><code>packages/shared</code>：成本输入的 <code>purchasePriceMinor</code> 改为「已解析的金额 + 来源标记」；新增 <code>AllocationRole</code> 类型</td></tr>
+        <tr><td><strong>前端</strong></td><td>记一笔（新建物品内联表单）、录入物品（同步记账二选一）、物品详情（合并数字主线 + 未关联标记）、配件批次弹层（挂流水）</td></tr>
+        <tr><td><strong>验证</strong></td><td><code>smoke:items</code> 增补：两条不变量的断言、role 校验、未关联流水回退路径；现有 57 项保持全绿</td></tr>
+        <tr><td><strong>文档</strong></td><td>设计报告 §6.3 / §8.2 措辞对齐；<code>docs/project-structure.md</code> 第 4.5 节补充绑定约定</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">不影响：认证、账户与利息、分类、转账、幂等与游标分页——这些链路与本方案没有交集。</p>
+</section>
+
+<!-- ============================================================ -->
+<section id="s11">
+  <h2><span class="no">11</span>待你拍板</h2>
+  <div class="box box-warn">
+    <p><b>Q7 · 是否采纳「流水为事实来源」？</b></p>
+    <p>① 方案 A（推荐）：一处录钱，物品派生，加三个字段 + 迁移；② 先只做方案 B 的对账提示，A 之后再议；③ 维持现状。</p>
+  </div>
+  <div class="box box-warn">
+    <p><b>Q8 · 同一物品允许多笔采购流水累加吗？</b></p>
+    <p>① 允许（推荐）：同款买第二次、配件分批补货都自然支持，成本 = 全部采购之和；② 只允许一笔本体流水，再买就新建物品。</p>
+  </div>
+  <div class="box box-warn">
+    <p><b>Q9 · 配件批次绑定流水后金额对不上时怎么办？</b></p>
+    <p>① 硬拦截 409，要求先改对（推荐，符合现有 <code>ACCESSORY_IN_USE</code> 等错误的处理风格）；② 仅提示放行，以批次单价为准。</p>
+  </div>
+  <div class="box box-info">
+    <p><b>拍板后的动作：</b>按选定方案更新设计报告与本文档，生成迁移，分 Step 落地，每个 Step 单独提交并保持 <code>smoke:*</code> 与 <code>typecheck</code> 全绿。</p>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
