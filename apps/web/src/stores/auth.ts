@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { authApi, type AuthUser, type LoginPayload } from '@/api/auth';
 import { ApiError } from '@/api/http';
+import { useLedgerStore } from '@/stores/ledger';
 
 export const useAuthStore = defineStore('auth', () => {
   // access token 只存内存，刷新令牌在 HttpOnly Cookie 中，避免 XSS 窃取
@@ -28,6 +29,8 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken.value = null;
     user.value = null;
     pendingMfaTicket.value = null;
+    // 账本缓存与登录态同生命周期，避免下一个登录者看到上一位用户的账户与分类
+    useLedgerStore().reset();
   }
 
   /** 启动时用刷新 Cookie 静默续期，恢复登录态 */

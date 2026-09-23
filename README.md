@@ -56,7 +56,14 @@ pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/
 
 ```bash
 pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
-pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 65 项
+pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
+```
+
+只做前端联调时可以不起数据库，用内存替身跑后端（数据重启即清空）：
+
+```bash
+pnpm --filter @itemlife/api dev:memory     # API http://127.0.0.1:3000/api/docs
+pnpm --filter @itemlife/web dev            # 前端 http://127.0.0.1:5173
 ```
 
 也可以在容器里开发（源码挂载 + 热重载，前后端一致的容器环境）：

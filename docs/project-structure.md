@@ -66,9 +66,11 @@ apps/web/
 │   ├── App.vue
 │   ├── api/                  # ★ 唯一的网络出口
 │   │   ├── http.ts           #   axios 实例、Bearer 注入、401 静默续期、错误归一化、unwrap()
-│   │   └── auth.ts           #   认证相关请求 + 类型（AuthUser / LoginPayload / …）
+│   │   ├── auth.ts           #   认证相关请求 + 类型（AuthUser / LoginPayload / …）
+│   │   └── ledger.ts         #   记账域请求 + 类型：accounts / categories / transactions / interestApi
 │   ├── stores/               # Pinia：跨页面共享状态
-│   │   └── auth.ts           #   令牌（仅内存）、当前用户、MFA 票据、login/logout/bootstrap
+│   │   ├── auth.ts           #   令牌（仅内存）、当前用户、MFA 票据、login/logout/bootstrap
+│   │   └── ledger.ts         #   账户 / 分类 / 汇总缓存，refresh() 单飞刷新，登出时 reset()
 │   ├── router/
 │   │   └── index.ts          # 路由表 + 登录守卫（meta.public 放行、meta.title/nav 供外壳使用）
 │   ├── layouts/
@@ -77,9 +79,10 @@ apps/web/
 │   │   ├── auth/             #   LoginView / RegisterView / MfaVerifyView
 │   │   ├── DashboardView.vue  ItemsView.vue  LedgerView.vue
 │   │   ├── NewTransactionView.vue  FamilyView.vue
+│   │   ├── AccountsView.vue  CategoriesView.vue
 │   │   ├── MeView.vue  SecurityView.vue  SettingsView.vue
 │   │   └── NotFoundView.vue
-│   ├── components/           # 可复用小组件（AuthCard / PagePlaceholder）
+│   ├── components/           # 可复用小组件（AuthCard / PagePlaceholder / AppModal）
 │   ├── utils/                # 无状态辅助函数（navigation.ts）
 │   └── assets/styles/main.css
 └── tsconfig.json
@@ -261,13 +264,24 @@ modules/auth/
   恢复码 / 刷新令牌轮换与盗用检测 / 失败锁定 / 登出全链路，前端登录、注册、两步验证、安全设置（MFA 绑定与恢复码展示）四个页面。
 - 已完成（后端）：**M2 记账核心**——数据域（个人 / 家庭）、分类树与预置分类、账户与派生余额、计息配置、
   记一笔（收 / 支 / 转账 + 多物品分摊 + 幂等键 + 游标分页 + 区间小计）、利息自动结息与手动结息。
-  离线冒烟 `smoke:ledger` 65 项、`smoke:auth` 37 项全绿；`pnpm typecheck` 无错误。
-- **M2 前端尚未开工**：`LedgerView` / `NewTransactionView` / `SettingsView` 仍是占位页，
-  分类管理、账户管理、记一笔、流水筛选这些界面待做（后端契约已冻结，见各模块 `dto/*.vo.ts`）。
+  离线冒烟 `smoke:ledger` 66 项、`smoke:auth` 37 项全绿；`pnpm typecheck` 无错误。
+- 已完成（前端）：**M2 记账核心**——请求层 `api/ledger.ts` 与 Pinia `stores/ledger.ts`（账户 / 分类 / 汇总缓存与单飞刷新）、
+  通用底部弹层 `components/AppModal.vue`、账户管理页（余额汇总 + 计息配置 + 手动结息预览）、
+  分类管理页（两级树 + 增删改 + 上移/下移排序 + 停用过滤）、记一笔（收 / 支 / 转账三态）、
+  流水列表（筛选 / 游标分页 / 编辑 / 删除）、设置页入口改造。
+- 前端已验收：账户新建（含年化 1.75% / 每月结息）、收入支出转账三类流水落库、
+  转账成对写入与删除连带回滚（银行 12 000 / 现金 1 300 → 删转账后 13 200 / 275.47）、
+  26 笔游标翻页无重复无遗漏、区间小计随筛选与编辑实时同步、分类停用后不再出现在记账选择器、
+  排序刷新后仍保持、有流水的分类删除被 409 拦截并提示改「停用」。
+- 前端未覆盖：结息**有计息天数**时的预览渲染（内存环境当天开户算不出天数，数值口径由 `smoke:ledger` 覆盖）；
+  移动端视口渲染（本机浏览器视口异常，只能按 Tailwind 断点类静态复核）。
 - 与设计报告的一处**有意偏差**：报告流程 A 写「注册后自动签发待开启 MFA 的会话」，实现改为**注册后跳登录页**
   （`/login?registered=1`），原因是自动登录会让「注册 → 引导绑定 MFA」多一次令牌往返，收益低而状态分支多；绑定 MFA 仍可在登录后由安全页触发。
 - 另一处**有意偏差**：报告 8.5 写「入账后把 `interest_posted_at` 推进至结息日」，实现推进至**今天**，
   即区间终点始终是今天（按实际天数计息）；这样预览金额 = 立即入账金额，服务停机数日后重跑能补上这几天的利息，不会漏算。
+- 一处**接口契约细节**：`GET /categories?includeArchived=false` 与省略参数等价。查询串里的布尔值经全局
+  `enableImplicitConversion` 会先被转成 `Boolean('false') === true`，因此该字段用 `@Transform` 回读原始入参显式解析
+  （见 `categories/dto/category-list.dto.ts` 的注释），`smoke:ledger` 有对应回归断言。
 - 尚未验证：`make up` 的容器内端到端（本机 Docker 守护进程未启动）。首次在目标内网部署时，按设计报告第 10 章的部署清单复核一遍。
 - 待决：仓库里 compose 文件命名与 README 描述不一致（`docker-compose.yml` 目前是开发叠加内容、
   `docker-compose.prod.yml` 未入库），需要统一一次命名。

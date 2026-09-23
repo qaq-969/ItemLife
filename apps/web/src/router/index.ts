@@ -57,6 +57,18 @@ const routes: RouteRecordRaw[] = [
       },
       { path: 'family', name: 'family', component: () => import('@/views/FamilyView.vue'), meta: { title: '家庭' } },
       {
+        path: 'accounts',
+        name: 'accounts',
+        component: () => import('@/views/AccountsView.vue'),
+        meta: { title: '账户管理' },
+      },
+      {
+        path: 'categories',
+        name: 'categories',
+        component: () => import('@/views/CategoriesView.vue'),
+        meta: { title: '分类管理' },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('@/views/SettingsView.vue'),

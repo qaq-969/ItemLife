@@ -140,6 +140,9 @@ async function main(): Promise<void> {
   const withArchived = await request('GET', '/categories?kind=expense&includeArchived=true', { token });
   const archivedNode = withArchived.body.data.find((node: any) => node.id === petId);
   check('includeArchived=true 可显示停用分类及子分类', Boolean(archivedNode?.archivedAt) && Boolean(archivedNode?.children?.[0]?.archivedAt));
+  // 前端选择器会把布尔值显式序列化成字符串（false），必须与「省略参数」等价
+  const explicitFalse = await request('GET', '/categories?kind=expense&includeArchived=false', { token });
+  check('includeArchived=false 与省略参数等价（不返回停用分类）', !explicitFalse.body.data.some((node: any) => node.id === petId));
   await request('PATCH', `/categories/${petId}`, { body: { archived: false }, token });
 
   const removedCategory = await request('DELETE', `/categories/${petId}`, { token });
