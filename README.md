@@ -57,6 +57,7 @@ pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/
 ```bash
 pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
 pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
+pnpm --filter @itemlife/api smoke:items    # 物品：成本指标 / 配件消耗审计 / 看板 / 分摊关联 等 57 项
 ```
 
 只做前端联调时可以不起数据库，用内存替身跑后端（数据重启即清空）：
@@ -83,3 +84,6 @@ make migrate    # 容器内执行 prisma migrate deploy
 ## 里程碑（详见设计报告第 12 章）
 
 M1 骨架 + 认证 → M2 记账核心（含多物品分摊、利息） → M3 物品与配件成本 → M4 家庭协作 → M5 看板 → M6 加固与交付
+
+当前进度：M1 / M2 / M3 已完成（后端 + 前端 + 离线冒烟 + 浏览器验收），M4 起待开工。
+逐项进度、有意偏差与验收记录见 [`docs/project-structure.md`](docs/project-structure.md) 第 9 章。

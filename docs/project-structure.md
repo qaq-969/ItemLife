@@ -67,7 +67,8 @@ apps/web/
 │   ├── api/                  # ★ 唯一的网络出口
 │   │   ├── http.ts           #   axios 实例、Bearer 注入、401 静默续期、错误归一化、unwrap()
 │   │   ├── auth.ts           #   认证相关请求 + 类型（AuthUser / LoginPayload / …）
-│   │   └── ledger.ts         #   记账域请求 + 类型：accounts / categories / transactions / interestApi
+│   │   ├── ledger.ts         #   记账域请求 + 类型：accounts / categories / transactions / interestApi
+│   │   └── items.ts          #   物品域请求 + 类型：itemsApi（含配件批次、使用 / 撤销、看板 overview）
 │   ├── stores/               # Pinia：跨页面共享状态
 │   │   ├── auth.ts           #   令牌（仅内存）、当前用户、MFA 票据、login/logout/bootstrap
 │   │   └── ledger.ts         #   账户 / 分类 / 汇总缓存，refresh() 单飞刷新，登出时 reset()
@@ -77,9 +78,10 @@ apps/web/
 │   │   └── AppShell.vue      # 登录后的应用外壳（顶部栏 + 移动端底部导航）
 │   ├── views/                # 页面级组件：一个路由一个文件
 │   │   ├── auth/             #   LoginView / RegisterView / MfaVerifyView
-│   │   ├── DashboardView.vue  ItemsView.vue  LedgerView.vue
-│   │   ├── NewTransactionView.vue  FamilyView.vue
+│   │   ├── LedgerView.vue  NewTransactionView.vue
 │   │   ├── AccountsView.vue  CategoriesView.vue
+│   │   ├── ItemsView.vue  ItemDetailView.vue  ItemFormView.vue
+│   │   ├── DashboardView.vue  FamilyView.vue
 │   │   ├── MeView.vue  SecurityView.vue  SettingsView.vue
 │   │   └── NotFoundView.vue
 │   ├── components/           # 可复用小组件（AuthCard / PagePlaceholder / AppModal）
@@ -107,6 +109,7 @@ apps/api/
 ├── scripts/                  # 不参与构建的离线脚本
 │   ├── auth-smoke.ts         #   认证链路冒烟（内存假 DB/Redis，无需 MySQL 即可跑）
 │   ├── ledger-smoke.ts       #   记账核心冒烟（分类 / 账户 / 流水 / 转账 / 结息）
+│   ├── items-smoke.ts        #   物品与配件冒烟（成本指标 / 配件消耗审计 / 看板 / 分摊关联）
 │   └── support/
 │       ├── mini-prisma.ts    #   通用内存 Prisma 引擎（按 schema 建表 + 关系解析）
 │       └── in-memory.ts      #   本仓库的表定义与 Redis 替身
@@ -135,7 +138,8 @@ apps/api/
 │       ├── categories/        #   分类树 + 预置 + 排序 + 停用（见 4.4）
 │       ├── accounts/          #   账户 CRUD + 派生余额 + 计息配置（见 4.4）
 │       ├── transactions/      #   记一笔 / 转账 / 分摊 / 列表筛选 / 小计（见 4.4）
-│       └── interest/          #   结息：Cron 自动 + 手动预览与入账（见 4.4）
+│       ├── interest/          #   结息：Cron 自动 + 手动预览与入账（见 4.4）
+│       └── items/             #   物品 / 配件库存与审计 / 成本指标 / 看板（见 4.5）
 ├── nest-cli.json  tsconfig.json  tsconfig.build.json
 └── Dockerfile  docker-entrypoint.sh   # 容器入口：等 DB → 迁移 → 启动
 ```
@@ -148,7 +152,7 @@ HTTP 请求
   → 全局守卫  ThrottlerGuard（限流）→ JwtAuthGuard（鉴权）
   → 控制器 Controller                 只做 HTTP 契约：取参、调 service、写 Cookie、选状态码
   → 服务 Service                      业务规则的唯一落点（事务、幂等、错误码都在这层）
-  → 能力提供者（TokenService / MfaService / BalanceService / InterestService / …）
+  → 能力提供者（TokenService / MfaService / BalanceService / InterestService / CostService / …）
   → 基础设施（PrismaService / REDIS_CLIENT）
   → 全局拦截器 TransformInterceptor（包络成功响应）
   → 全局过滤器 AllExceptionsFilter（包络异常）
@@ -217,6 +221,27 @@ modules/auth/
 结息口径（`interest.service.ts`）：区间 = `[上次结息日 + 1, 今天]`，`dueAt = 锚点 + 周期` 只决定自动任务何时触发；
 入账后锚点推进到今天，因此「同一天重跑」区间为空 → 400 `INTEREST_PERIOD_EMPTY`，绝不重复入账。
 
+### 4.5 物品与配件（M3）中的几个关键约定
+
+**成本指标只有一个实现**（`packages/shared/src/cost.ts` + `modules/items/cost.service.ts`）：
+公式写在 shared，`CostService` 只负责批量取数与聚合，列表 / 详情 / 看板 / 前端折线共用同一口径，禁止在页面里另算一份。
+三核心 = 总支付（本体 + Σ 配件单价×总数）、当前持有成本（本体 + Σ 单价×已用数）、日均持有成本（持有成本 ÷ 持有天数）；
+两辅助 = 配件库存价值（Σ 单价×剩余数）、预计日均成本（总支付 ÷ 预期寿命天数，未填则为 `null`）。
+「持有天数」= 今天 − 购买日 + 1（按 UTC 天算，最小 1），所以购买当天就是 1 天。
+
+**配件消耗必须留痕**（`accessory_usages`）：每次「使用 / 撤销」写一行审计（`delta_qty` 正负 + 变更后的 `used_qty_after` + 操作人），
+`item_accessories.used_qty` 与 Σ`delta_qty` 必须恒等；建档时若填了「已用数量」也会补一条初始审计，保证这条不变式从第一天起成立。
+消耗 / 撤销走**乐观锁**：`$transaction` 内 `updateMany({ where: { id, usedQty: 当前值 }, data: { usedQty: 新值 } })`，
+`count === 0` → 409 `ACCESSORY_CONFLICT`（并发下不会把库存扣成负数）；超额 → 400 `ACCESSORY_QTY_EXCEEDED` / `ACCESSORY_RESTORE_EXCEEDED`。
+
+**成本演进折线**（`CostService.timelineOf`）：以购买日的本体价起步，把审计按 UTC 天聚合成台阶（使用抬升、撤销回落），
+最后补一个「今天」的点让折线延伸到当前；同一天多次变更合并成一点，所以折线点数 = 有变更的天数 + 1~2。
+
+**删除语义**：物品是软删（`deleted_at`），历史流水与审计保留；配件批次删除前必须先把已用数量撤销掉（`used_qty > 0` → 409 `ACCESSORY_IN_USE`），
+否则成本会凭空下降。物品列表 `GET /items` 是游标分页，看板用不分页的 `GET /items/overview`（口径与列表一致，仅不带分页）。
+「一笔流水 → 多物品」分摊落在 `transaction_items`，流水列表可用 `?itemId=` 反查；注意分摊**不重复计入**成本指标，
+它只做追溯与对账（物品详情页的「关联流水」）。
+
 ## 5. 环境变量与配置
 
 - 唯一清单在 `.env.example`；**代码里只在 `src/config/configuration.ts` 读 `process.env`**，其余地方用 `ConfigService.get('点分路径')`。
@@ -239,7 +264,8 @@ modules/auth/
 | `pnpm typecheck` | 三个包一起做类型检查 |
 | `pnpm build` | shared → web → api 全量构建 |
 | `pnpm --filter @itemlife/api smoke:auth` | **认证链路离线冒烟**：内存假 DB/Redis 启动真实 Nest 应用，跑完注册 → 登录 → MFA → 恢复码 → 令牌旋转/盗用 → 锁定 → 登出共 37 项断言 |
-| `pnpm --filter @itemlife/api smoke:ledger` | **记账核心离线冒烟**：预置分类 → 分类增删改排序 → 账户与派生余额 → 记一笔与分摊校验 → 转账联动 → 改删回滚 → 列表筛选分页小计 → 幂等键 → 结息幂等 → 数据域隔离，共 65 项断言 |
+| `pnpm --filter @itemlife/api smoke:ledger` | **记账核心离线冒烟**：预置分类 → 分类增删改排序 → 账户与派生余额 → 记一笔与分摊校验 → 转账联动 → 改删回滚 → 列表筛选分页小计 → 幂等键 → 结息幂等 → 数据域隔离，共 66 项断言 |
+| `pnpm --filter @itemlife/api smoke:items` | **物品与配件离线冒烟**：牙刷建档验收（64 000 / 44 000 / 440 / 100 天 / 20 000）→ 预期寿命与预计日均 → 消耗 / 撤销与审计链（含超额与并发冲突）→ 成本演进台阶 → 批次增删 → 看板聚合与排行 → 流水分摊与 `?itemId=` 反查 → 参数校验 → 数据域隔离 → 分页与软删，共 57 项断言 |
 | `make up` / `make dev` | 生产 / 开发容器编排（需 Docker 守护进程） |
 | `pnpm --filter @itemlife/api prisma:studio` | 可视化查看数据 |
 
@@ -248,7 +274,8 @@ modules/auth/
 
 内存引擎的注意点（`scripts/support/mini-prisma.ts`）：它是**按运行时值类型匹配**的简化实现（Uint8Array 比字节、Date 比时间戳），
 只覆盖本仓库实际用到的查询形态。新增查询若用到 `where` 之外的 Prisma 特性（如 `_avg`、`distinct`、`having`），
-要么在引擎里补，要么把断言改成走真实 MySQL。
+要么在引擎里补，要么把断言改成走真实 MySQL。关系过滤 `some / every / none` 已支持（`matchWhere` 里递归解析），
+物品域的「一笔流水反查物品」就是这么断言的；`where` 里新增关系形态时先补这里，否则冒烟会静默漏测。
 
 ## 8. 命名与风格约定
 
@@ -273,7 +300,20 @@ modules/auth/
   转账成对写入与删除连带回滚（银行 12 000 / 现金 1 300 → 删转账后 13 200 / 275.47）、
   26 笔游标翻页无重复无遗漏、区间小计随筛选与编辑实时同步、分类停用后不再出现在记账选择器、
   排序刷新后仍保持、有流水的分类删除被 409 拦截并提示改「停用」。
+- 已完成（后端）：**M3 物品与配件**——物品档案（软删保留历史）、配件批次（购入日期 + 可选关联流水）、
+  使用 / 撤销审计（`accessory_usages`，乐观锁防并发超扣）、成本指标唯一入口 `CostService`（三核心 + 两辅助 + 成本演进台阶）、
+  看板 `GET /items/overview`、流水分摊反查 `GET /transactions?itemId=`。离线冒烟 `smoke:items` 57 项全绿。
+- 已完成（前端）：**M3 物品与配件**——`api/items.ts` 请求层、物品列表 / 看板页（总览三数 + 日均成本排行 + 状态与关键字筛选 + 游标翻页）、
+  物品详情页（六格指标 + ECharts 台阶折线 + 配件进度条与使用 / 撤销 / 删除批次 + 使用审计 + 关联流水）、
+  物品新建 / 编辑页（本体价 + 动态配件批次行，编辑态可清空分类与预期寿命）、记一笔的**多物品分摊选择器**
+  （单物品可留空继承整笔、多物品逐项填写、超出金额在前端就拦下）。
+- 前端已验收（M3，2026-09-23，`dev:memory` + 浏览器）：牙刷建档 400 + 12×20 已用 2 →
+  总支付 ¥640.00 / 当前持有 ¥440.00 / 日均 ¥4.40（100 天）/ 配件库存 ¥200.00、预计日均 ¥1.60（寿命 400 天）与第 8.2 节公式逐项一致；
+  使用 1 → 460.00（审计「使用 1（余 3）」）、撤销 1 → 440.00（「撤销 1（余 2）」）；成本演进折线随消耗刷新且 tooltip 数值与接口一致；
+  编辑购买日 / 分类 / 预期寿命后指标随之重算；记一笔单物品分摊（¥100.00）与多物品分摊（¥140.00 + ¥60.00 / 共 2 件）分别落库，
+  分摊合计超过流水金额时前端直接报错；物品看板 2 件在册汇总 ¥700.00 / ¥500.00 / ¥200.00 与排行（牙刷 4.40 > 沐浴露 1.11）一致。
 - 前端未覆盖：结息**有计息天数**时的预览渲染（内存环境当天开户算不出天数，数值口径由 `smoke:ledger` 覆盖）；
+  配件批次「删除」的 409 提示（需先撤销消耗，接口口径由 `smoke:items` 覆盖）；
   移动端视口渲染（本机浏览器视口异常，只能按 Tailwind 断点类静态复核）。
 - 与设计报告的一处**有意偏差**：报告流程 A 写「注册后自动签发待开启 MFA 的会话」，实现改为**注册后跳登录页**
   （`/login?registered=1`），原因是自动登录会让「注册 → 引导绑定 MFA」多一次令牌往返，收益低而状态分支多；绑定 MFA 仍可在登录后由安全页触发。
@@ -283,5 +323,3 @@ modules/auth/
   `enableImplicitConversion` 会先被转成 `Boolean('false') === true`，因此该字段用 `@Transform` 回读原始入参显式解析
   （见 `categories/dto/category-list.dto.ts` 的注释），`smoke:ledger` 有对应回归断言。
 - 尚未验证：`make up` 的容器内端到端（本机 Docker 守护进程未启动）。首次在目标内网部署时，按设计报告第 10 章的部署清单复核一遍。
-- 待决：仓库里 compose 文件命名与 README 描述不一致（`docker-compose.yml` 目前是开发叠加内容、
-  `docker-compose.prod.yml` 未入库），需要统一一次命名。
