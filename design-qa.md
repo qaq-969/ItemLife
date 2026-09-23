@@ -29,6 +29,7 @@ Focused-region comparison was not required: the desktop and mobile combined shee
 
 - Pass 1: compared the reference and all three desktop captures in `qa/comparison-desktop.jpg`; no P0/P1/P2 mismatch was found.
 - Pass 2: compared the reference and all three 390 px mobile captures in `qa/comparison-mobile.jpg`; no overlap or horizontal clipping was found. The longer registration form correctly continues below the viewport.
+- Pass 3: user screenshots exposed unequal registration field sizing and circular MFA placeholder glyphs. Added zero-width-safe grid tracks, fixed 52 px input heights, top-aligned field rows, and changed the MFA placeholder to `XXXXXX`. The before/after evidence in `qa/comparison-fixes.jpg` confirms aligned registration fields and six visible X placeholders.
 
 ## Final result
 
