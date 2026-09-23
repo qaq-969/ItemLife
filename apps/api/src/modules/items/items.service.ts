@@ -26,7 +26,7 @@ const TOP_COSTLY_SIZE = 5;
 const TRANSACTION_INCLUDE = {
   account: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true, icon: true, color: true } },
-  itemLinks: { select: { itemId: true, amountMinor: true } },
+  itemLinks: { select: { itemId: true, amountMinor: true, role: true, accessoryId: true } },
 } satisfies Prisma.TransactionInclude;
 
 interface CostedItem {

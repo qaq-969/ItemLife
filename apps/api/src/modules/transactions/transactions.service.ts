@@ -28,7 +28,7 @@ import { TransactionVo } from './dto/transaction.vo';
 const TRANSACTION_INCLUDE = {
   account: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true, icon: true, color: true } },
-  itemLinks: { select: { itemId: true, amountMinor: true } },
+  itemLinks: { select: { itemId: true, amountMinor: true, role: true, accessoryId: true } },
 } satisfies Prisma.TransactionInclude;
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 3600;

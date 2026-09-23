@@ -25,6 +25,19 @@ export type CategoryKind = (typeof CATEGORY_KINDS)[number];
 export const ITEM_STATUSES = ['in_use', 'idle', 'retired', 'lost'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
+/**
+ * 分摊角色：决定这笔钱如何进入物品成本（设计报告联动调整方案 5.4）。
+ * - body      本体采购：全额计入总支付与持有成本
+ * - fee       附加费用（维修 / 运费 / 保险）：同本体，全额计入
+ * - accessory 配件采购：计总支付，未使用部分挂库存、已用部分进持有成本
+ * - link      仅关联：纯溯源，不进任何成本口径
+ */
+export const ALLOCATION_ROLES = ['body', 'fee', 'accessory', 'link'] as const;
+export type AllocationRole = (typeof ALLOCATION_ROLES)[number];
+
+/** 进总支付的两种角色（本体 + 附加费用），金额与本体价同口径。 */
+export const ITEM_COST_ROLES = ['body', 'fee'] as const satisfies readonly AllocationRole[];
+
 export const HOUSEHOLD_ROLES = ['owner', 'member'] as const;
 export type HouseholdRole = (typeof HOUSEHOLD_ROLES)[number];
 

@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import type {
   AccountBrief,
   AccountType,
+  AllocationRole,
   CategoryBrief,
   TransactionDto,
   TransactionItemAllocation,
@@ -13,7 +14,12 @@ import { bytesToUuid } from '../../../common/utils/id';
 export interface TransactionRelations {
   account?: { id: Uint8Array; name: string; type: AccountType } | null;
   category?: { id: Uint8Array; name: string; icon: string | null; color: string | null } | null;
-  itemLinks?: Array<{ itemId: Uint8Array; amountMinor: bigint | null }>;
+  itemLinks?: Array<{
+    itemId: Uint8Array;
+    amountMinor: bigint | null;
+    role: AllocationRole;
+    accessoryId: Uint8Array | null;
+  }>;
 }
 
 /** 与 Prisma 行结构解耦：只要求调用方提供这几个字段。 */
@@ -109,6 +115,8 @@ export class TransactionVo implements TransactionDto {
     vo.items = (row.itemLinks ?? []).map((link) => ({
       itemId: bytesToUuid(link.itemId),
       amountMinor: link.amountMinor === null ? null : Number(link.amountMinor),
+      role: link.role,
+      accessoryId: link.accessoryId ? bytesToUuid(link.accessoryId) : null,
     }));
     vo.createdAt = row.createdAt.toISOString();
     return vo;

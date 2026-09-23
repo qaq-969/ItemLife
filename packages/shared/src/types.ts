@@ -1,5 +1,6 @@
 import type {
   AccountType,
+  AllocationRole,
   CategoryKind,
   InterestFreq,
   ItemStatus,
@@ -40,12 +41,20 @@ export interface ItemCostSummary {
   heldDays: number;
   remainingStockMinor: number;
   projectedDailyMinor: number | null;
+  /** 关联流水里没归到任何物品的钱；仅详情页提示 */
+  unallocatedMinor: number;
 }
 
-/** 记一笔时的物品分摊项：amountMinor = null 表示继承整笔流水金额（仅单物品）。 */
+/**
+ * 记一笔时的物品分摊项：amountMinor = null 表示继承整笔流水金额（仅单物品）。
+ * role 决定这笔钱如何进成本，默认 link（仅关联）。
+ */
 export interface TransactionItemAllocation {
   itemId: string;
   amountMinor: number | null;
+  role: AllocationRole;
+  /** role = accessory 时指向具体批次 */
+  accessoryId: string | null;
 }
 
 /** 流水里的账户快照：列表页直接展示名称，免去前端二次映射。 */
