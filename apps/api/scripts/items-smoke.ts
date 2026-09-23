@@ -384,6 +384,304 @@ async function main(): Promise<void> {
   const historyKept = await request('GET', `/transactions?itemId=${umbrellaId}`, { token });
   check('物品删除不影响历史流水查询（分摊记录保留）', historyKept.body.data.total === 1, String(historyKept.body.data.total));
 
+  console.log('\n[11] 记一笔的物品归属：内联新建 / 用途角色 / 批次绑定');
+  const cupTx = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 10_400,
+      accountId: cash.body.data.id,
+      note: '超市采购',
+      items: [
+        { newItem: { key: 'cup', name: '保温杯', expectedLifespanDays: 365 }, role: 'body', amountMinor: 8_000 },
+        {
+          itemRef: 'cup',
+          role: 'accessory',
+          amountMinor: 2_400,
+          newAccessory: { name: '杯刷', totalQty: 12 },
+        },
+      ],
+    },
+    token,
+  });
+  check(
+    '内联新建物品 + 同笔流水补配件，一次落库',
+    cupTx.status === 201 && cupTx.body.data.items.length === 2,
+    JSON.stringify(cupTx.body).slice(0, 240),
+  );
+  const cupId = cupTx.body.data.items.find((row: any) => row.role === 'body')?.itemId;
+  const cupDetail = await request('GET', `/items/${cupId}`, { token });
+  const cup = cupDetail.body.data;
+  check(
+    '物品购买日取流水发生日、本体价取本行分摊',
+    cup.purchaseDate === today && cup.purchasePriceMinor === 8_000,
+    JSON.stringify({ purchaseDate: cup.purchaseDate, purchasePriceMinor: cup.purchasePriceMinor }),
+  );
+  check(
+    '① 总支付 = 8000 + 12×200 = 10400；② 持有成本 = 8000（配件未用不计入）',
+    cup.cost.payTotalMinor === 10_400 && cup.cost.holdCostMinor === 8_000,
+    JSON.stringify(cup.cost),
+  );
+  check(
+    '⑤ 预计日均 = 10400 ÷ 365 = 28 分/天',
+    cup.cost.projectedDailyMinor === 28,
+    String(cup.cost.projectedDailyMinor),
+  );
+  const cupBatch = cup.accessories[0];
+  check(
+    '当场新建批次：单价 = 2400 ÷ 12 = 200，并指回本笔流水',
+    cupBatch.unitPriceMinor === 200 && cupBatch.totalQty === 12 && cupBatch.transactionId === cupTx.body.data.id,
+    JSON.stringify(cupBatch),
+  );
+  check(
+    '分摊行带出用途角色与批次 ID',
+    cupTx.body.data.items[1].accessoryId === cupBatch.id && cupTx.body.data.items[1].role === 'accessory',
+    JSON.stringify(cupTx.body.data.items[1]),
+  );
+  const cupInlineRow = tables.item.rows.find((row: any) => bytesToUuid(row.id) === cupId);
+  check(
+    '本体采购流水指针已写入，供详情页跳转',
+    Boolean(cupInlineRow) && bytesToUuid(cupInlineRow!.purchaseTransactionId) === cupTx.body.data.id,
+    JSON.stringify(cupInlineRow?.purchaseTransactionId),
+  );
+  check(
+    '折线从购买日起步，末点 = 当前持有成本 8000',
+    cup.costTimeline.at(-1).holdCostMinor === 8_000 && cup.costTimeline[0].date === today,
+    JSON.stringify(cup.costTimeline),
+  );
+
+  const feeTx = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 500,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, role: 'fee', amountMinor: 500 }],
+      note: '换电池',
+    },
+    token,
+  });
+  const afterFee = await request('GET', `/items/${cupId}`, { token });
+  check(
+    '附加费用（fee）全额计入：总支付 10900 / 持有成本 8500',
+    feeTx.status === 201 &&
+      afterFee.body.data.cost.payTotalMinor === 10_900 &&
+      afterFee.body.data.cost.holdCostMinor === 8_500,
+    JSON.stringify(afterFee.body.data.cost),
+  );
+
+  const linkTx = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 2_000,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, amountMinor: 1_000 }],
+      note: '带餐盒',
+    },
+    token,
+  });
+  const afterLink = await request('GET', `/items/${cupId}`, { token });
+  check(
+    '未写用途默认「仅关联」：成本不变，仍为 10900 / 8500',
+    afterLink.body.data.cost.payTotalMinor === 10_900 && afterLink.body.data.cost.holdCostMinor === 8_500,
+    JSON.stringify(afterLink.body.data.cost),
+  );
+  check(
+    '未分摊金额 = 流水金额 − Σ分摊 = 2000 − 1000',
+    afterLink.body.data.cost.unallocatedMinor === 1_000,
+    String(afterLink.body.data.cost.unallocatedMinor),
+  );
+
+  const refill = await request('POST', `/items/${cupId}/accessories`, {
+    body: { name: '滤芯', unitPriceMinor: 200, totalQty: 5 },
+    token,
+  });
+  const refillId = refill.body.data.id;
+  const mismatch = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 900,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, role: 'accessory', accessoryId: refillId, amountMinor: 900 }],
+    },
+    token,
+  });
+  check(
+    '批次「单价×总数 ≠ 分摊金额」硬拦 409',
+    mismatch.status === 409 && mismatch.body.code === 'ACCESSORY_AMOUNT_MISMATCH',
+    JSON.stringify(mismatch.body),
+  );
+
+  const refillTx = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 1_000,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, role: 'accessory', accessoryId: refillId, amountMinor: 1_000 }],
+      note: '补滤芯',
+    },
+    token,
+  });
+  const afterRefill = await request('GET', `/items/${cupId}`, { token });
+  check(
+    '金额一致时挂账成功：批次指回本笔流水',
+    refillTx.status === 201 && afterRefill.body.data.accessories.some((row: any) => row.id === refillId && row.transactionId === refillTx.body.data.id),
+    JSON.stringify(afterRefill.body.data.accessories),
+  );
+  check(
+    '恒等式成立：持有成本 8500 = 总支付 11900 − 剩余库存 3400',
+    afterRefill.body.data.cost.payTotalMinor === 11_900 &&
+      afterRefill.body.data.cost.holdCostMinor === 8_500 &&
+      afterRefill.body.data.cost.remainingStockMinor === 3_400,
+    JSON.stringify(afterRefill.body.data.cost),
+  );
+
+  const rebind = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 1_000,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, role: 'accessory', accessoryId: refillId, amountMinor: 1_000 }],
+    },
+    token,
+  });
+  check(
+    '同一批次不能挂到第二笔流水（409 ACCESSORY_ALREADY_BOUND）',
+    rebind.status === 409 && rebind.body.code === 'ACCESSORY_ALREADY_BOUND',
+    JSON.stringify(rebind.body),
+  );
+
+  const indivisible = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      items: [
+        {
+          itemId: cupId,
+          role: 'accessory',
+          amountMinor: 100,
+          newAccessory: { name: '除不尽', totalQty: 3 },
+        },
+      ],
+    },
+    token,
+  });
+  check(
+    '新建批次金额除不尽被拒（409 ACCESSORY_AMOUNT_MISMATCH）',
+    indivisible.status === 409 && indivisible.body.code === 'ACCESSORY_AMOUNT_MISMATCH',
+    JSON.stringify(indivisible.body),
+  );
+
+  await request('DELETE', `/transactions/${feeTx.body.data.id}`, { token });
+  const afterDeleteFee = await request('GET', `/items/${cupId}`, { token });
+  check(
+    '软删流水不再计入成本（fee 撤销：持有成本回到 8000）',
+    afterDeleteFee.body.data.cost.holdCostMinor === 8_000 && afterDeleteFee.body.data.cost.payTotalMinor === 11_400,
+    JSON.stringify(afterDeleteFee.body.data.cost),
+  );
+
+  const toFee = await request('PATCH', `/transactions/${linkTx.body.data.id}`, {
+    body: { items: [{ itemId: cupId, role: 'fee', amountMinor: 1_000 }] },
+    token,
+  });
+  const afterPatch = await request('GET', `/items/${cupId}`, { token });
+  check(
+    '编辑流水可改用途：link → fee 后持有成本变为 9000',
+    toFee.status === 200 && afterPatch.body.data.cost.holdCostMinor === 9_000,
+    JSON.stringify(afterPatch.body.data.cost),
+  );
+  check(
+    '编辑后未分摊金额随新分摊重算（2000 − 1000）',
+    afterPatch.body.data.cost.unallocatedMinor === 1_000,
+    String(afterPatch.body.data.cost.unallocatedMinor),
+  );
+
+  console.log('\n[12] 归属入参校验');
+  const noBatch = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, role: 'accessory', amountMinor: 100 }],
+    },
+    token,
+  });
+  check(
+    '配件用途未挂批次被拒（400 ACCESSORY_BATCH_REQUIRED）',
+    noBatch.status === 400 && noBatch.body.code === 'ACCESSORY_BATCH_REQUIRED',
+    JSON.stringify(noBatch.body),
+  );
+
+  const badRole = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      items: [{ newItem: { name: '无名之物' }, role: 'link', amountMinor: 100 }],
+    },
+    token,
+  });
+  check(
+    '新建物品只能是本体或附加费用（400 ALLOCATION_ROLE_INVALID）',
+    badRole.status === 400 && badRole.body.code === 'ALLOCATION_ROLE_INVALID',
+    JSON.stringify(badRole.body),
+  );
+
+  const unknownRef = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      items: [{ newItem: { name: '孤零零' }, amountMinor: 50 }, { itemRef: 'nobody', role: 'fee', amountMinor: 50 }],
+    },
+    token,
+  });
+  check(
+    'itemRef 指向不存在的临时键被拒（400 ITEM_REF_UNKNOWN）',
+    unknownRef.status === 400 && unknownRef.body.code === 'ITEM_REF_UNKNOWN',
+    JSON.stringify(unknownRef.body),
+  );
+
+  const twoTargets = await request('POST', '/transactions', {
+    body: {
+      type: 'expense',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      items: [{ itemId: cupId, itemRef: 'cup', amountMinor: 100 }],
+    },
+    token,
+  });
+  check(
+    '同一行同时给 itemId 与 itemRef 被拒（400 ALLOCATION_TARGET_INVALID）',
+    twoTargets.status === 400 && twoTargets.body.code === 'ALLOCATION_TARGET_INVALID',
+    JSON.stringify(twoTargets.body),
+  );
+
+  const inlineOnEdit = await request('PATCH', `/transactions/${cupTx.body.data.id}`, {
+    body: { items: [{ newItem: { name: '编辑期新建' }, amountMinor: 100 }] },
+    token,
+  });
+  check(
+    '编辑流水不允许内联新建（400 INLINE_CREATE_NOT_ALLOWED）',
+    inlineOnEdit.status === 400 && inlineOnEdit.body.code === 'INLINE_CREATE_NOT_ALLOWED',
+    JSON.stringify(inlineOnEdit.body),
+  );
+
+  const transferItems = await request('POST', '/transactions', {
+    body: {
+      type: 'transfer_out',
+      amountMinor: 100,
+      accountId: cash.body.data.id,
+      toAccountId: cash.body.data.id,
+      items: [{ itemId: cupId, amountMinor: 100 }],
+    },
+    token,
+  });
+  check(
+    '转账仍不接受物品分摊（400 TRANSFER_ITEM_FORBIDDEN）',
+    transferItems.status === 400 && transferItems.body.code === 'TRANSFER_ITEM_FORBIDDEN',
+    JSON.stringify(transferItems.body),
+  );
+
   const passed = results.filter((row) => row.ok).length;
   console.log(`\n=== 物品冒烟结果：${passed}/${results.length} 通过 ===`);
   await app.close();

@@ -203,7 +203,7 @@ export class TransactionsService {
         });
         if (allocations) {
           await tx.transactionItem.deleteMany({ where: { transactionId: row.id } });
-          await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt));
+          await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt), row.createdBy);
           await this.writeAllocations(tx, row.id, allocations);
           await this.pinPurchaseTransactions(tx, row.id, allocations);
         }
@@ -312,6 +312,7 @@ export class TransactionsService {
     const allocations = await this.resolveAllocations(scope, dto.items, dto.amountMinor, { allowInline: true });
     const id = newId();
     const occurredDate = startOfDayUtc(occurredAt);
+    const actorId = this.requireId(userId);
 
     await this.prisma.$transaction(async (tx) => {
       await this.createInlineItems(tx, scope, id, allocations, occurredDate, dto.amountMinor);
@@ -326,10 +327,10 @@ export class TransactionsService {
           occurredAt,
           note,
           currency: account.currency || DEFAULT_CURRENCY,
-          createdBy: this.requireId(userId),
+          createdBy: actorId,
         },
       });
-      await this.settleAccessoryBatches(tx, id, allocations, occurredDate);
+      await this.settleAccessoryBatches(tx, id, allocations, occurredDate, actorId);
       await this.writeAllocations(tx, id, allocations);
       await this.pinPurchaseTransactions(tx, id, allocations);
     });
@@ -390,6 +391,7 @@ export class TransactionsService {
     transactionId: IdBytes,
     allocations: ResolvedAllocation[],
     fallbackDate: Date,
+    actorId: IdBytes,
   ): Promise<void> {
     await tx.itemAccessory.updateMany({ where: { transactionId }, data: { transactionId: null } });
 
@@ -399,6 +401,7 @@ export class TransactionsService {
 
       if (row.newAccessory) {
         const id = newId();
+        const usedQty = row.newAccessory.usedQty ?? 0;
         await tx.itemAccessory.create({
           data: {
             id,
@@ -406,10 +409,24 @@ export class TransactionsService {
             name: row.newAccessory.name?.trim() || DEFAULT_ACCESSORY_NAME,
             unitPriceMinor: BigInt(amount / row.newAccessory.totalQty),
             totalQty: row.newAccessory.totalQty,
+            usedQty,
             purchasedAt: parseDateOnly(row.newAccessory.purchasedAt) ?? fallbackDate,
             transactionId,
           },
         });
+        // 初始已用数补一条审计，保持 used_qty 与审计之和恒等（与物品页入库同口径）
+        if (usedQty > 0) {
+          await tx.accessoryUsage.create({
+            data: {
+              id: newId(),
+              accessoryId: id,
+              itemId: row.itemId,
+              deltaQty: usedQty,
+              usedQtyAfter: usedQty,
+              actorUserId: actorId,
+            },
+          });
+        }
         row.accessoryId = id;
       } else if (row.accessoryId) {
         await tx.itemAccessory.update({ where: { id: row.accessoryId }, data: { transactionId } });
@@ -517,11 +534,17 @@ export class TransactionsService {
       }
 
       const role: AllocationRole = raw.role ?? (raw.newItem ? 'body' : 'link');
-      const isInline = Boolean(raw.newItem) || Boolean(raw.itemRef);
-      if (isInline && role !== 'body' && role !== 'fee') {
+      // 新建物品那一行只能承载本体或附加费用；itemRef 行可以给该物品补配件
+      if (raw.newItem && role !== 'body' && role !== 'fee') {
         throw new BadRequestException({
           code: 'ALLOCATION_ROLE_INVALID',
           message: '新建物品只能作为本体或附加费用入账',
+        });
+      }
+      if (raw.itemRef && role === 'accessory' && !raw.newAccessory) {
+        throw new BadRequestException({
+          code: 'ACCESSORY_BATCH_REQUIRED',
+          message: '该物品尚未入库，配件请当场新建批次',
         });
       }
 
@@ -549,6 +572,12 @@ export class TransactionsService {
           });
         }
         if (raw.newAccessory) {
+          if ((raw.newAccessory.usedQty ?? 0) > raw.newAccessory.totalQty) {
+            throw new BadRequestException({
+              code: 'ACCESSORY_QTY_EXCEEDS_TOTAL',
+              message: '初始已用数量不能超过本批次总数',
+            });
+          }
           assertAccessoryAmountMatches(Number(amount), null, raw.newAccessory.totalQty);
         }
       } else if (raw.accessoryId || raw.newAccessory) {

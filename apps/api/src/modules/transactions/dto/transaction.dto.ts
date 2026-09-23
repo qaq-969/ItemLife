@@ -72,6 +72,13 @@ export class InlineAccessoryDto {
   @Max(MAX_ACCESSORY_QTY)
   totalQty!: number;
 
+  @ApiPropertyOptional({ description: '初始已用数量（≤ totalQty）；会同步写入一条使用审计' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_ACCESSORY_QTY)
+  usedQty?: number;
+
   @ApiPropertyOptional({ description: '购入日期 YYYY-MM-DD；省略取流水发生日期' })
   @IsOptional()
   @IsISO8601()

@@ -8,7 +8,7 @@ import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/curso
 import { parseDateOnly, startOfDayUtc } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
 import { TransactionVo } from '../transactions/dto/transaction.vo';
-import { CostService } from './cost.service';
+import { CostService, emptyCostContext, type ItemCostContext } from './cost.service';
 import type {
   AccessoryQtyDto,
   CreateAccessoryDto,
@@ -31,6 +31,7 @@ const TRANSACTION_INCLUDE = {
 
 interface CostedItem {
   row: Item;
+  context: ItemCostContext;
   cost: ItemCostSummary;
   accessoryCount: number;
 }
@@ -342,10 +343,9 @@ export class ItemsService {
   }
 
   private async buildDetail(scope: OwnerScope, row: Item): Promise<ItemDetailVo> {
-    const accessories = await this.prisma.itemAccessory.findMany({
-      where: { itemId: row.id },
-      orderBy: [{ purchasedAt: 'asc' }, { id: 'asc' }],
-    });
+    const context =
+      (await this.cost.contextFor([row.id])).get(bytesToUuid(row.id)) ?? emptyCostContext();
+    const accessories = context.accessories;
     // 折线要完整时间线，故取全量升序；展示的审计列表再倒序截断
     const usages = await this.prisma.accessoryUsage.findMany({
       where: { itemId: row.id },
@@ -356,7 +356,7 @@ export class ItemsService {
       usages.map((usage) => usage.actorUserId).filter((id): id is IdBytes => Boolean(id)),
     );
 
-    const base = await this.voOf(scope, row, accessories);
+    const base = await this.voOf(scope, row, context);
     return ItemDetailVo.detail(base, {
       accessories: accessories.map((accessory) => AccessoryVo.from(accessory)),
       usages: usages
@@ -371,7 +371,7 @@ export class ItemsService {
         ),
       costTimeline: this.cost.timelineOf(
         row,
-        accessories,
+        context,
         usages.map((usage) => ({
           accessoryId: usage.accessoryId,
           deltaQty: usage.deltaQty,
@@ -399,10 +399,15 @@ export class ItemsService {
   }
 
   private async costedItems(rows: Item[]): Promise<CostedItem[]> {
-    const grouped = await this.cost.accessoriesByItem(rows.map((row) => row.id));
+    const contexts = await this.cost.contextFor(rows.map((row) => row.id));
     return rows.map((row) => {
-      const accessories = grouped.get(bytesToUuid(row.id)) ?? [];
-      return { row, cost: this.cost.metricsOf(row, accessories), accessoryCount: accessories.length };
+      const context = contexts.get(bytesToUuid(row.id)) ?? emptyCostContext();
+      return {
+        row,
+        context,
+        cost: this.cost.metricsOf(row, context),
+        accessoryCount: context.accessories.length,
+      };
     });
   }
 
@@ -419,13 +424,12 @@ export class ItemsService {
     );
   }
 
-  private async voOf(scope: OwnerScope, row: Item, accessories?: ItemAccessory[]): Promise<ItemVo> {
-    const owned =
-      accessories ?? (await this.cost.accessoriesByItem([row.id])).get(bytesToUuid(row.id)) ?? [];
+  private async voOf(scope: OwnerScope, row: Item, context?: ItemCostContext): Promise<ItemVo> {
+    const costContext = context ?? (await this.cost.contextFor([row.id])).get(bytesToUuid(row.id)) ?? emptyCostContext();
     const briefs = await this.categoryBriefs(scope, row.categoryId ? [row.categoryId] : []);
-    return ItemVo.from(row, this.cost.metricsOf(row, owned), {
+    return ItemVo.from(row, this.cost.metricsOf(row, costContext), {
       category: row.categoryId ? briefs.get(bytesToUuid(row.categoryId)) ?? null : null,
-      accessoryCount: owned.length,
+      accessoryCount: costContext.accessories.length,
     });
   }
 

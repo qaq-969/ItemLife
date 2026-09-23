@@ -99,11 +99,22 @@ export function createInMemoryPrisma(): AnyDb {
           tables.category.rows.find((category: any) => same(category.id, row.categoryId)) ?? null,
         itemLinks: (row, tables) =>
           tables.transactionItem.rows.filter((link: any) => same(link.transactionId, row.id)),
+        accessoryBatches: (row, tables) =>
+          tables.itemAccessory.rows.filter((accessory: any) => same(accessory.transactionId, row.id)),
+        purchasedItems: (row, tables) =>
+          tables.item.rows.filter((item: any) => same(item.purchaseTransactionId, row.id)),
       },
     }),
 
     transactionItem: createTable('transactionItem', {
-      defaults: () => ({ amountMinor: null, createdAt: now() }),
+      defaults: () => ({ amountMinor: null, role: 'link', accessoryId: null, createdAt: now() }),
+      relations: {
+        transaction: (row, tables) =>
+          tables.transaction.rows.find((transaction: any) => same(transaction.id, row.transactionId)) ?? null,
+        item: (row, tables) => tables.item.rows.find((item: any) => same(item.id, row.itemId)) ?? null,
+        accessory: (row, tables) =>
+          tables.itemAccessory.rows.find((accessory: any) => same(accessory.id, row.accessoryId)) ?? null,
+      },
     }),
 
     item: createTable('item', {
@@ -113,6 +124,7 @@ export function createInMemoryPrisma(): AnyDb {
         expectedLifespanDays: null,
         status: 'in_use',
         note: null,
+        purchaseTransactionId: null,
         deletedAt: null,
         createdAt: now(),
         updatedAt: now(),
@@ -122,6 +134,8 @@ export function createInMemoryPrisma(): AnyDb {
           tables.itemAccessory.rows.filter((accessory: any) => same(accessory.itemId, row.id)),
         accessoryUsages: (row, tables) =>
           tables.accessoryUsage.rows.filter((usage: any) => same(usage.itemId, row.id)),
+        purchaseTransaction: (row, tables) =>
+          tables.transaction.rows.find((transaction: any) => same(transaction.id, row.purchaseTransactionId)) ?? null,
       },
     }),
 
@@ -137,6 +151,8 @@ export function createInMemoryPrisma(): AnyDb {
         item: (row, tables) => tables.item.rows.find((item: any) => same(item.id, row.itemId)) ?? null,
         transaction: (row, tables) =>
           tables.transaction.rows.find((transaction: any) => same(transaction.id, row.transactionId)) ?? null,
+        transactionLinks: (row, tables) =>
+          tables.transactionItem.rows.filter((link: any) => same(link.accessoryId, row.id)),
         usages: (row, tables) =>
           tables.accessoryUsage.rows.filter((usage: any) => same(usage.accessoryId, row.id)),
       },
