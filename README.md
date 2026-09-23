@@ -2,12 +2,6 @@
 
 `beta-html-jl` 是 ItemLife 的静态界面设计分支，用于在接入业务功能前确认整体视觉方向。
 
-## 在线查看
-
-### [点击这里直接查看 ItemLife UI 页面](https://qaq-969.github.io/ItemLife/)
-
-> 在线页面由 GitHub Pages 发布。直接点击仓库文件列表中的 `index.html`，GitHub 只会显示源代码，不会渲染页面。
-
 ## 当前设计
 
 - 主色：雾霭紫 `#8877C7`
