@@ -57,6 +57,15 @@ enum HouseholdRole {
   member
 }
 
+/// 这笔钱算在物品的哪一部分（设计报告联动调整方案 §5.4）：
+/// body 本体采购 / fee 附加费用（维修、运费）/ accessory 配件采购 / link 仅关联（不进成本）
+enum AllocationRole {
+  body
+  fee
+  accessory
+  link
+}
+
 // ---------------------------------------------------------------- 认证与用户
 
 model User {
@@ -245,6 +254,8 @@ model Transaction {
   itemLinks TransactionItem[]
   // 通过流水登记入库的配件批次
   accessoryBatches ItemAccessory[]
+  // 以本笔流水作为「本体采购流水」的物品
+  purchasedItems Item[] @relation("ItemPurchaseTransaction")
 
   @@index([ownerType, ownerId, occurredAt])
   @@index([accountId, type, amountMinor])
@@ -255,17 +266,23 @@ model Transaction {
 
 /// 流水-物品分摊：amount_minor 为 NULL 表示继承整笔流水金额（仅单物品场景允许）
 model TransactionItem {
-  id            Bytes    @id @db.Binary(16)
-  transactionId Bytes    @map("transaction_id") @db.Binary(16)
-  itemId        Bytes    @map("item_id") @db.Binary(16)
-  amountMinor   BigInt?  @map("amount_minor")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id            Bytes          @id @db.Binary(16)
+  transactionId Bytes          @map("transaction_id") @db.Binary(16)
+  itemId        Bytes          @map("item_id") @db.Binary(16)
+  amountMinor   BigInt?        @map("amount_minor")
+  /// 这笔钱算在本体 / 附加费用 / 配件 / 仅关联；默认 link，保证历史数据不进成本口径
+  role          AllocationRole @default(link)
+  /// 配件采购时指向具体批次；为 NULL 表示该分摊与批次无关
+  accessoryId   Bytes?         @map("accessory_id") @db.Binary(16)
+  createdAt     DateTime       @default(now()) @map("created_at")
 
-  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  item        Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transaction Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  item        Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  accessory   ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
 
   @@unique([transactionId, itemId])
   @@index([itemId, createdAt])
+  @@index([accessoryId])
   @@map("transaction_items")
 }
 
@@ -278,8 +295,10 @@ model Item {
   name                 String     @db.VarChar(100)
   categoryId           Bytes?     @map("category_id") @db.Binary(16)
   purchaseDate         DateTime   @map("purchase_date") @db.Date
-  /// 本体价（分）；若由流水创建，默认取该流水的分摊金额
+  /// 回退价（分）：仅当物品没有任何 body/fee 分摊时参与成本计算（见联动调整方案 §5.2）
   purchasePriceMinor   BigInt     @map("purchase_price_minor")
+  /// 首次本体采购流水的快捷指针（详情页跳转用）；金额一律以 transaction_items 求和为准
+  purchaseTransactionId Bytes?   @map("purchase_transaction_id") @db.Binary(16)
   currency             String     @default("CNY") @db.Char(3)
   expectedLifespanDays Int?       @map("expected_lifespan_days")
   status               ItemStatus @default(in_use)
@@ -291,6 +310,7 @@ model Item {
   accessories     ItemAccessory[]
   accessoryUsages AccessoryUsage[]
   transactionLinks TransactionItem[]
+  purchaseTransaction Transaction? @relation("ItemPurchaseTransaction", fields: [purchaseTransactionId], references: [id], onDelete: SetNull)
 
   @@index([ownerType, ownerId, status])
   @@index([categoryId])
@@ -306,14 +326,15 @@ model ItemAccessory {
   usedQty        Int      @default(0) @map("used_qty")
   /// 配件购入日期：同一物品可分批入库，成本按批次单价计算
   purchasedAt    DateTime @map("purchased_at") @db.Date
-  /// 关联的购买流水（可选）：对账用，成本指标不读流水，避免双重计数
+  /// 首次入库的购买流水（快捷指针，从流水侧反查请用 TransactionItem.accessoryId）
   transactionId  Bytes?   @map("transaction_id") @db.Binary(16)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  item        Item               @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  transaction Transaction?       @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  usages      AccessoryUsage[]
+  item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transaction      Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  transactionLinks TransactionItem[]
+  usages           AccessoryUsage[]
 
   @@index([itemId])
   @@map("item_accessories")
