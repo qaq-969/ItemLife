@@ -50,11 +50,25 @@ export interface ItemCostSummary {
  * role 决定这笔钱如何进成本，默认 link（仅关联）。
  */
 export interface TransactionItemAllocation {
+  id: string;
   itemId: string;
+  parentId: string | null;
+  /** 当前显示名称：物品/配件取实时实体名，附加费用取行名称 */
+  name: string;
+  /** 归属物品的实时名称 */
+  itemName: string;
+  /** 物品已撤销时仍保留流水历史 */
+  itemDeletedAt: string | null;
   amountMinor: number | null;
   role: AllocationRole;
   /** role = accessory 时指向具体批次 */
   accessoryId: string | null;
+  /** 配件批次明细；非配件行均为 null/0 */
+  quantity: number | null;
+  unitPriceMinor: number | null;
+  firstUnitExtraMinor: number;
+  usedQty: number | null;
+  revertedQty: number | null;
 }
 
 /** 流水里的账户快照：列表页直接展示名称，免去前端二次映射。 */
@@ -184,8 +198,10 @@ export interface AccessoryDto {
   itemId: string;
   name: string;
   unitPriceMinor: number;
+  firstUnitExtraMinor: number;
   totalQty: number;
   usedQty: number;
+  revertedQty: number;
   remainingQty: number;
   purchasedAt: string;
   /** 关联的购买流水（可选） */
@@ -215,8 +231,19 @@ export interface CostPointDto {
 export interface ItemDetailDto extends ItemDto {
   accessories: AccessoryDto[];
   usages: AccessoryUsageDto[];
+  reverts: InventoryRevertDto[];
   costTimeline: CostPointDto[];
   transactions: TransactionDto[];
+}
+
+export interface InventoryRevertDto {
+  id: string;
+  kind: 'dispose' | 'correction' | 'refund';
+  qty: number | null;
+  reason: string;
+  accessoryId: string | null;
+  sourceTransactionId: string | null;
+  createdAt: string;
 }
 
 /** 物品看板：总投入、在役数量、配件库存价值与成本排行。 */

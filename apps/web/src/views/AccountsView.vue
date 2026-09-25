@@ -15,6 +15,7 @@ import { accountsApi, interestApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   cash: '现金',
@@ -281,11 +282,7 @@ onMounted(() => {
 
         <div>
           <label class="label" for="account-type">账户类型</label>
-          <select id="account-type" v-model="form.type" class="field">
-            <option v-for="type in ACCOUNT_TYPES" :key="type" :value="type">
-              {{ ACCOUNT_TYPE_LABELS[type] }}
-            </option>
-          </select>
+          <AppSelect v-model="form.type" :options="ACCOUNT_TYPES.map((type) => ({ value: type, label: ACCOUNT_TYPE_LABELS[type] }))" />
         </div>
 
         <div v-if="!editingId">
@@ -313,11 +310,7 @@ onMounted(() => {
             </div>
             <div>
               <label class="label" for="account-freq">结息周期</label>
-              <select id="account-freq" v-model="form.freq" class="field">
-                <option v-for="freq in INTEREST_FREQS" :key="freq" :value="freq">
-                  {{ FREQ_LABELS[freq] }}
-                </option>
-              </select>
+              <AppSelect v-model="form.freq" :options="INTEREST_FREQS.map((freq) => ({ value: freq, label: FREQ_LABELS[freq] }))" />
             </div>
           </div>
           <p v-if="form.interestEnabled" class="mt-2 text-xs text-ink-3">

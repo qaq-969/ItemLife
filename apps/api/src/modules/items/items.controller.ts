@@ -4,7 +4,7 @@ import { Throttle } from '@nestjs/throttler';
 import type { Paginated } from '@itemlife/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-user';
-import { AccessoryQtyDto, CreateAccessoryDto, CreateItemDto, ListItemsQueryDto, UpdateItemDto } from './dto/item.dto';
+import { AccessoryQtyDto, CreateAccessoryDto, CreateItemDto, InventoryRevertDto, ListItemsQueryDto, UpdateItemDto } from './dto/item.dto';
 import { AccessoryUsageVo, AccessoryVo, ItemDetailVo, ItemsOverviewVo, ItemVo } from './dto/item.vo';
 import { ItemsService } from './items.service';
 
@@ -50,9 +50,9 @@ export class ItemsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '删除物品（软删）：历史流水与配件审计保留' })
-  remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string): Promise<null> {
-    return this.items.remove(user.id, id);
+  @ApiOperation({ summary: '撤销物品库存：保留关联流水，并生成可追溯撤销记录' })
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: InventoryRevertDto): Promise<null> {
+    return this.items.remove(user.id, id, dto);
   }
 
   @Post(':id/accessories')
@@ -74,9 +74,9 @@ export class AccessoriesController {
   constructor(private readonly items: ItemsService) {}
 
   @Delete(':id')
-  @ApiOperation({ summary: '删除配件批次：仅在未使用过（used_qty = 0）时允许' })
-  remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string): Promise<null> {
-    return this.items.removeAccessory(user.id, id);
+  @ApiOperation({ summary: '撤销配件库存：保留批次、购买流水与撤销凭据' })
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: InventoryRevertDto): Promise<null> {
+    return this.items.removeAccessory(user.id, id, dto);
   }
 
   @Post(':id/consume')

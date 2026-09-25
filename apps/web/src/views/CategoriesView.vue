@@ -5,6 +5,7 @@ import { categoriesApi, type CategoryOrderItem } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
 import AppModal from '@/components/AppModal.vue';
+import AppSelect from '@/components/AppSelect.vue';
 
 const KIND_LABELS: Record<CategoryKind, string> = { expense: '支出', income: '收入' };
 
@@ -300,10 +301,7 @@ onMounted(() => {
 
         <div>
           <label class="label" for="category-parent">父分类</label>
-          <select id="category-parent" v-model="form.parentId" class="field">
-            <option value="">（顶层分类）</option>
-            <option v-for="node in topLevelOptions" :key="node.id" :value="node.id">{{ node.name }}</option>
-          </select>
+          <AppSelect v-model="form.parentId" :options="[{ value: '', label: '（顶层分类）' }, ...topLevelOptions.map((node) => ({ value: node.id, label: node.name }))]" />
           <p class="mt-1 text-xs text-ink-3">最多两级；调整父分类会把该分类移动到新父级下。</p>
         </div>
 

@@ -82,9 +82,16 @@ function timeLabel(iso: string): string {
 /** 一笔流水分摊到多件物品时，只显示属于本物品的那一份 */
 function amountLabel(transaction: TransactionDto): string {
   const links = transaction.items ?? [];
-  const mine = links.find((row) => row.itemId === detail.value?.id);
-  if (links.length <= 1) return formatMoney(mine?.amountMinor ?? transaction.amountMinor);
-  return `${formatMoney(mine?.amountMinor ?? 0)} / 共 ${links.length} 件`;
+  const mine = links.filter((row) => row.itemId === detail.value?.id && row.role !== 'link');
+  const total = mine.reduce((sum, row) => sum + (row.amountMinor ?? transaction.amountMinor), 0);
+  return `${formatMoney(total)} / ${mine.length || 1} 项`;
+}
+
+function transactionLines(transaction: TransactionDto): string {
+  return transaction.items
+    .filter((row) => row.itemId === detail.value?.id)
+    .map((row) => `${row.name}${row.role === 'link' ? '' : ` ${formatMoney(row.amountMinor ?? transaction.amountMinor)}`}`)
+    .join(' · ');
 }
 
 /** 台阶式折线：横轴日期、纵轴当日结束时的累计持有成本。 */
@@ -168,8 +175,9 @@ function restore(accessoryId: string): void {
 }
 
 function removeAccessory(accessoryId: string, name: string): void {
-  if (!window.confirm(`删除配件批次「${name}」？已使用过的批次需要先撤销消耗。`)) return;
-  void guard(() => itemsApi.removeAccessory(accessoryId), '配件批次已删除');
+  const reason = window.prompt(`撤销配件「${name}」会保留采购流水。请填写原因：`);
+  if (!reason?.trim()) return;
+  void guard(() => itemsApi.removeAccessory(accessoryId, { reason: reason.trim() }), '已生成配件撤销记录');
 }
 
 function submitBatch(): void {
@@ -225,10 +233,11 @@ function submitBatch(): void {
 function removeItem(): void {
   const item = detail.value;
   if (!item) return;
-  if (!window.confirm(`删除物品「${item.name}」？历史流水与配件记录会保留。`)) return;
+  const reason = window.prompt(`撤销物品「${item.name}」会保留历史流水。请填写原因：`);
+  if (!reason?.trim()) return;
   void (async () => {
     try {
-      await itemsApi.remove(item.id);
+      await itemsApi.remove(item.id, { reason: reason.trim() });
       await router.push({ name: 'items' });
     } catch (error) {
       errorText.value = error instanceof ApiError ? error.message : '删除失败，请重试';
@@ -237,6 +246,16 @@ function removeItem(): void {
 }
 
 const cost = computed(() => detail.value?.cost ?? null);
+const bodyPriceMinor = computed(() => {
+  const item = detail.value;
+  if (!item) return 0;
+  const bodyRows = item.transactions.flatMap((transaction) =>
+    transaction.items
+      .filter((row) => row.itemId === item.id && row.role === 'body')
+      .map((row) => row.amountMinor ?? transaction.amountMinor),
+  );
+  return bodyRows.length > 0 ? bodyRows.reduce((sum, amount) => sum + amount, 0) : item.purchasePriceMinor;
+});
 
 onMounted(() => {
   window.addEventListener('resize', handleResize);
@@ -318,8 +337,8 @@ onBeforeUnmount(() => {
           </div>
           <div class="rounded-xl bg-slate-50 p-3">
             <p class="text-xs text-ink-2">本体价</p>
-            <p class="mt-1 text-xl font-semibold tabular-nums">{{ formatMoney(detail.purchasePriceMinor) }}</p>
-            <p class="mt-0.5 text-xs text-ink-3">购买时支付</p>
+            <p class="mt-1 text-xl font-semibold tabular-nums">{{ formatMoney(bodyPriceMinor) }}</p>
+            <p class="mt-0.5 text-xs text-ink-3">{{ detail.transactions.length ? '来自关联流水' : '未关联流水的回退价' }}</p>
           </div>
           <div class="rounded-xl bg-slate-50 p-3">
             <p class="text-xs text-ink-2">预计日均成本</p>
@@ -342,6 +361,17 @@ onBeforeUnmount(() => {
           每次使用配件按批次单价抬升持有成本，撤销则回落；台阶高度就是一次消耗带来的成本。
         </p>
         <div ref="chartEl" class="mt-3 h-56 w-full"></div>
+      </section>
+
+      <section v-if="detail.reverts.length" class="card p-5">
+        <h2 class="text-sm font-semibold">库存撤销记录</h2>
+        <p class="mt-1 text-xs text-ink-3">每次移除库存都保留原因与原始购买流水。</p>
+        <ul class="mt-3 divide-y divide-line">
+          <li v-for="revert in detail.reverts" :key="revert.id" class="py-2 text-sm">
+            <span>{{ timeLabel(revert.createdAt) }} · {{ revert.kind === 'correction' ? '更正' : '报废/移除' }}{{ revert.qty === null ? '' : ` ${revert.qty} 个` }} · {{ revert.reason }}</span>
+            <RouterLink v-if="revert.sourceTransactionId" :to="{ name: 'transactions', query: { itemId: detail.id } }" class="ml-2 text-xs text-brand">关联流水</RouterLink>
+          </li>
+        </ul>
       </section>
 
       <section class="card p-5">
@@ -441,7 +471,7 @@ onBeforeUnmount(() => {
 
       <section class="card p-5">
         <h2 class="text-sm font-semibold">关联流水</h2>
-        <p class="mt-1 text-xs text-ink-3">记一笔时把金额分摊到本物品的流水（用于对账，不重复计入成本）。</p>
+        <p class="mt-1 text-xs text-ink-3">流水是购买金额来源；物品、配件名称与价格会在两页保持一致。</p>
         <p v-if="detail.transactions.length === 0" class="mt-3 text-sm text-ink-3">
           还没有关联流水。在「记一笔」里选择本物品即可分摊。
         </p>
@@ -449,12 +479,13 @@ onBeforeUnmount(() => {
           <li
             v-for="transaction in detail.transactions"
             :key="transaction.id"
-            class="flex items-center justify-between gap-3 py-2 text-sm"
+            class="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
           >
-            <span class="min-w-0 truncate">
+            <span class="min-w-0 flex-1 truncate">
               {{ transaction.category?.name ?? (transaction.type === 'income' ? '收入' : '支出') }}
               <span class="text-xs text-ink-3"> · {{ transaction.account.name }}</span>
               <span v-if="transaction.note" class="text-xs text-ink-3"> · {{ transaction.note }}</span>
+              <span class="mt-0.5 block truncate text-xs text-brand">{{ transactionLines(transaction) }}</span>
             </span>
             <span
               class="shrink-0 tabular-nums"
@@ -463,6 +494,10 @@ onBeforeUnmount(() => {
               {{ transaction.type === 'income' ? '+' : '−' }}{{ amountLabel(transaction) }}
             </span>
             <span class="shrink-0 text-xs text-ink-3">{{ timeLabel(transaction.occurredAt) }}</span>
+            <RouterLink
+              :to="{ name: 'transactions', query: { itemId: detail.id, edit: transaction.id, from: transaction.occurredAt.slice(0, 10), to: transaction.occurredAt.slice(0, 10) } }"
+              class="btn btn-ghost min-h-8 px-2 text-xs"
+            >编辑明细</RouterLink>
           </li>
         </ul>
       </section>

@@ -13,6 +13,7 @@ import type {
   AccessoryQtyDto,
   CreateAccessoryDto,
   CreateItemDto,
+  InventoryRevertDto,
   ListItemsQueryDto,
   UpdateItemDto,
 } from './dto/item.dto';
@@ -26,7 +27,20 @@ const TOP_COSTLY_SIZE = 5;
 const TRANSACTION_INCLUDE = {
   account: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true, icon: true, color: true } },
-  itemLinks: { select: { itemId: true, amountMinor: true, role: true, accessoryId: true } },
+  itemLinks: {
+    select: {
+      id: true,
+      itemId: true,
+      parentId: true,
+      name: true,
+      amountMinor: true,
+      role: true,
+      accessoryId: true,
+      item: { select: { name: true, deletedAt: true } },
+      accessory: { select: { name: true, unitPriceMinor: true, firstUnitExtraMinor: true, totalQty: true, usedQty: true, revertedQty: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  },
 } satisfies Prisma.TransactionInclude;
 
 interface CostedItem {
@@ -198,11 +212,17 @@ export class ItemsService {
     return this.voOf(scope, updated);
   }
 
-  /** 软删除物品：历史流水与配件审计都保留，列表与看板不再计入。 */
-  async remove(userId: string, id: string): Promise<null> {
+  /** 撤销物品库存：历史流水不改写，新增可追溯凭据后才软删除。 */
+  async remove(userId: string, id: string, dto: InventoryRevertDto): Promise<null> {
     const { row, scope } = await this.requireItem(userId, id);
-    await this.prisma.item.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
-    this.audit.record('items.item.deleted', { userId, itemId: bytesToUuid(row.id), owner: scope.key });
+    const actorId = this.requireId(userId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.inventoryRevert.create({
+        data: { id: newId(), itemId: row.id, sourceTransactionId: row.purchaseTransactionId, kind: dto.kind ?? 'dispose', reason: dto.reason.trim(), createdBy: actorId },
+      });
+      await tx.item.update({ where: { id: row.id }, data: { deletedAt: new Date(), status: 'retired' } });
+    });
+    this.audit.record('items.item.reverted', { userId, itemId: bytesToUuid(row.id), owner: scope.key, kind: dto.kind ?? 'dispose' });
     return null;
   }
 
@@ -222,18 +242,21 @@ export class ItemsService {
     return AccessoryVo.from(accessory);
   }
 
-  /** 删除批次：已用过的批次会带走成本凭据，必须先撤销消耗。 */
-  async removeAccessory(userId: string, id: string): Promise<null> {
+  /** 撤销批次库存：不删批次，写入数量和来源流水都可追溯。 */
+  async removeAccessory(userId: string, id: string, dto: InventoryRevertDto): Promise<null> {
     const { accessory, item, scope } = await this.requireAccessory(userId, id);
-    if (accessory.usedQty > 0) {
-      throw new ConflictException({
-        code: 'ACCESSORY_IN_USE',
-        message: `该批次已用 ${accessory.usedQty} 个，删除会让持有成本无从追溯；请先撤销消耗`,
-      });
+    const remaining = accessory.totalQty - accessory.usedQty - accessory.revertedQty;
+    const qty = dto.qty ?? remaining;
+    if (qty > remaining) {
+      throw new ConflictException({ code: 'ACCESSORY_REVERT_EXCEEDED', message: `该批次仅剩 ${remaining} 个可撤销` });
     }
-
-    await this.prisma.itemAccessory.deleteMany({ where: { id: accessory.id } });
-    this.audit.record('items.accessory.deleted', {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.itemAccessory.update({ where: { id: accessory.id }, data: { revertedQty: { increment: qty } } });
+      await tx.inventoryRevert.create({
+        data: { id: newId(), itemId: item.id, accessoryId: accessory.id, sourceTransactionId: accessory.transactionId, kind: dto.kind ?? 'dispose', qty, reason: dto.reason.trim(), createdBy: this.requireId(userId) },
+      });
+    });
+    this.audit.record('items.accessory.reverted', {
       userId,
       itemId: bytesToUuid(item.id),
       accessoryId: bytesToUuid(accessory.id),
@@ -268,10 +291,10 @@ export class ItemsService {
         message: `该批次只用了 ${accessory.usedQty} 个，无法撤销 ${qty} 个`,
       });
     }
-    if (usedQtyAfter > accessory.totalQty) {
+    if (usedQtyAfter > accessory.totalQty - accessory.revertedQty) {
       throw new BadRequestException({
         code: 'ACCESSORY_QTY_EXCEEDED',
-        message: `该批次还剩 ${accessory.totalQty - accessory.usedQty} 个，不够消耗 ${qty} 个`,
+        message: `该批次还剩 ${accessory.totalQty - accessory.usedQty - accessory.revertedQty} 个，不够消耗 ${qty} 个`,
       });
     }
 
@@ -351,6 +374,11 @@ export class ItemsService {
       where: { itemId: row.id },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
+    const reverts = await this.prisma.inventoryRevert.findMany({
+      where: { itemId: row.id },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: USAGE_PAGE_SIZE,
+    });
     const nameById = new Map(accessories.map((accessory) => [bytesToUuid(accessory.id), accessory.name]));
     const actorNames = await this.actorNames(
       usages.map((usage) => usage.actorUserId).filter((id): id is IdBytes => Boolean(id)),
@@ -369,6 +397,15 @@ export class ItemsService {
             usage.actorUserId ? actorNames.get(bytesToUuid(usage.actorUserId)) ?? null : null,
           ),
         ),
+      reverts: reverts.map((revert) => ({
+        id: bytesToUuid(revert.id),
+        kind: revert.kind,
+        qty: revert.qty,
+        reason: revert.reason,
+        accessoryId: revert.accessoryId ? bytesToUuid(revert.accessoryId) : null,
+        sourceTransactionId: revert.sourceTransactionId ? bytesToUuid(revert.sourceTransactionId) : null,
+        createdAt: revert.createdAt.toISOString(),
+      })),
       costTimeline: this.cost.timelineOf(
         row,
         context,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ open: boolean; title: string }>();
+defineProps<{ open: boolean; title: string; wide?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 </script>
 
@@ -11,7 +11,8 @@ const emit = defineEmits<{ close: [] }>();
       @click.self="emit('close')"
     >
       <div
-        class="max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl"
+        class="max-h-[88dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl"
+        :class="wide ? 'max-w-4xl' : 'max-w-md'"
         role="dialog"
         aria-modal="true"
       >

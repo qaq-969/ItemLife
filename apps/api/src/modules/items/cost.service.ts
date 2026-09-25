@@ -157,8 +157,9 @@ export class CostService {
       expectedLifespanDays: item.expectedLifespanDays,
       accessories: context.accessories.map((row) => ({
         unitPriceMinor: Number(row.unitPriceMinor),
+        firstUnitExtraMinor: Number(row.firstUnitExtraMinor ?? 0n),
         totalQty: row.totalQty,
-        usedQty: row.usedQty,
+        usedQty: row.usedQty + row.revertedQty,
       })),
       allocations: context.allocations,
       unallocatedMinor: context.unallocatedMinor,
@@ -170,9 +171,9 @@ export class CostService {
    * 本体由分摊承载时不再用回退价起步，而是让分摊自己抬升（同日自动合并为一点）。
    */
   timelineOf(item: Item, context: ItemCostContext, usages: UsageDelta[]): CostPointDto[] {
-    const unitPrice = new Map(
-      context.accessories.map((row) => [bytesToUuid(row.id), Number(row.unitPriceMinor)]),
-    );
+    const unitPrice = new Map(context.accessories.map((row) => [bytesToUuid(row.id), Number(row.unitPriceMinor)]));
+    const firstExtra = new Map(context.accessories.map((row) => [bytesToUuid(row.id), Number(row.firstUnitExtraMinor ?? 0n)]));
+    const usedByAccessory = new Map<string, number>();
     const perDay = new Map<string, number>();
     const add = (date: Date, delta: number): void => {
       const key = dayKey(date);
@@ -188,7 +189,13 @@ export class CostService {
     }
     for (const event of context.events) add(event.occurredAt, event.amountMinor);
     for (const usage of usages) {
-      add(usage.createdAt, usage.deltaQty * (unitPrice.get(bytesToUuid(usage.accessoryId)) ?? 0));
+      const key = bytesToUuid(usage.accessoryId);
+      const before = usedByAccessory.get(key) ?? 0;
+      const after = before + usage.deltaQty;
+      add(usage.createdAt, usage.deltaQty * (unitPrice.get(key) ?? 0));
+      if (before === 0 && after > 0) add(usage.createdAt, firstExtra.get(key) ?? 0);
+      if (before > 0 && after === 0) add(usage.createdAt, -(firstExtra.get(key) ?? 0));
+      usedByAccessory.set(key, after);
     }
 
     const points: CostPointDto[] = [];

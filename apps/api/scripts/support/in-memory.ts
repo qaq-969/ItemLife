@@ -107,7 +107,7 @@ export function createInMemoryPrisma(): AnyDb {
     }),
 
     transactionItem: createTable('transactionItem', {
-      defaults: () => ({ amountMinor: null, role: 'link', accessoryId: null, createdAt: now() }),
+      defaults: () => ({ parentId: null, name: null, amountMinor: null, role: 'link', accessoryId: null, createdAt: now() }),
       relations: {
         transaction: (row, tables) =>
           tables.transaction.rows.find((transaction: any) => same(transaction.id, row.transactionId)) ?? null,
@@ -142,6 +142,8 @@ export function createInMemoryPrisma(): AnyDb {
     itemAccessory: createTable('itemAccessory', {
       defaults: () => ({
         usedQty: 0,
+        revertedQty: 0,
+        firstUnitExtraMinor: 0n,
         transactionId: null,
         purchasedAt: now(),
         createdAt: now(),
@@ -165,6 +167,16 @@ export function createInMemoryPrisma(): AnyDb {
           tables.itemAccessory.rows.find((accessory: any) => same(accessory.id, row.accessoryId)) ?? null,
         actor: (row, tables) => tables.user.rows.find((user: any) => same(user.id, row.actorUserId)) ?? null,
       },
+    }),
+
+    inventoryRevert: createTable('inventoryRevert', {
+      defaults: () => ({
+        accessoryId: null,
+        sourceTransactionId: null,
+        kind: 'dispose',
+        qty: null,
+        createdAt: now(),
+      }),
     }),
   };
 

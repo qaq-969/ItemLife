@@ -7,6 +7,7 @@ import {
   type CategoryBrief,
   type CostPointDto,
   type ItemCostSummary,
+  type InventoryRevertDto,
   type ItemDetailDto,
   type ItemDto,
   type ItemsOverviewDto,
@@ -99,13 +100,19 @@ export class AccessoryVo implements AccessoryDto {
   @ApiProperty({ description: '单价（分）' })
   unitPriceMinor!: number;
 
+  @ApiProperty({ description: '第一件配件额外分摊的余数（分）' })
+  firstUnitExtraMinor!: number;
+
   @ApiProperty()
   totalQty!: number;
 
   @ApiProperty()
   usedQty!: number;
 
-  @ApiProperty({ description: '剩余 = totalQty − usedQty' })
+  @ApiProperty({ description: '已撤销的库存数量' })
+  revertedQty!: number;
+
+  @ApiProperty({ description: '剩余 = totalQty − usedQty − revertedQty' })
   remainingQty!: number;
 
   @ApiProperty({ example: '2026-06-11' })
@@ -123,9 +130,11 @@ export class AccessoryVo implements AccessoryDto {
     vo.itemId = bytesToUuid(row.itemId);
     vo.name = row.name;
     vo.unitPriceMinor = Number(row.unitPriceMinor);
+    vo.firstUnitExtraMinor = Number(row.firstUnitExtraMinor);
     vo.totalQty = row.totalQty;
     vo.usedQty = row.usedQty;
-    vo.remainingQty = row.totalQty - row.usedQty;
+    vo.revertedQty = row.revertedQty;
+    vo.remainingQty = row.totalQty - row.usedQty - row.revertedQty;
     vo.purchasedAt = toDateOnlyString(row.purchasedAt);
     vo.transactionId = row.transactionId ? bytesToUuid(row.transactionId) : null;
     vo.createdAt = row.createdAt.toISOString();
@@ -179,6 +188,9 @@ export class ItemDetailVo extends ItemVo implements ItemDetailDto {
   @ApiProperty({ type: [AccessoryUsageVo], description: '消耗 / 撤销审计记录，最近在前' })
   usages!: AccessoryUsageVo[];
 
+  @ApiProperty({ type: [Object] })
+  reverts!: InventoryRevertDto[];
+
   @ApiProperty({ type: [Object], description: '成本演进台阶：{ date, holdCostMinor }' })
   costTimeline!: CostPointDto[];
 
@@ -190,6 +202,7 @@ export class ItemDetailVo extends ItemVo implements ItemDetailDto {
     extra: {
       accessories: AccessoryVo[];
       usages: AccessoryUsageVo[];
+      reverts: InventoryRevertDto[];
       costTimeline: CostPointDto[];
       transactions: TransactionVo[];
     },

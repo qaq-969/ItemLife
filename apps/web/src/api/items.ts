@@ -44,6 +44,12 @@ export interface ItemPatch {
   note?: string | null;
 }
 
+export interface InventoryRevertPayload {
+  kind?: 'dispose' | 'correction';
+  reason: string;
+  qty?: number;
+}
+
 export interface ItemQuery {
   domain?: string;
   status?: ItemStatus;
@@ -60,11 +66,11 @@ export const itemsApi = {
   detail: (id: string) => unwrap<ItemDetailDto>(http.get(`/items/${id}`)),
   create: (payload: ItemPayload) => unwrap<ItemDto>(http.post('/items', payload)),
   update: (id: string, payload: ItemPatch) => unwrap<ItemDto>(http.patch(`/items/${id}`, payload)),
-  remove: (id: string) => unwrap<null>(http.delete(`/items/${id}`)),
+  remove: (id: string, payload: InventoryRevertPayload) => unwrap<null>(http.delete(`/items/${id}`, { data: payload })),
 
   addAccessory: (itemId: string, payload: AccessoryPayload) =>
     unwrap<AccessoryDto>(http.post(`/items/${itemId}/accessories`, payload)),
-  removeAccessory: (id: string) => unwrap<null>(http.delete(`/accessories/${id}`)),
+  removeAccessory: (id: string, payload: InventoryRevertPayload) => unwrap<null>(http.delete(`/accessories/${id}`, { data: payload })),
   /** 使用 n 个配件（默认 1）：不可超过剩余 */
   consume: (id: string, qty = 1) => unwrap<AccessoryUsageDto>(http.post(`/accessories/${id}/consume`, { qty })),
   /** 撤销 n 个（默认 1）：不可小于 0 */

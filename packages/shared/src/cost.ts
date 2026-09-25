@@ -10,6 +10,8 @@
 /** 参与计算的配件批次：单价 × 总数 / 已用数（金额单位：分）。 */
 export interface CostAccessoryInput {
   unitPriceMinor: number;
+  /** 金额除不尽时全部计入第一件；第一件被使用后才进入持有成本。 */
+  firstUnitExtraMinor?: number;
   totalQty: number;
   usedQty: number;
 }
@@ -60,11 +62,11 @@ export function costMetricsOf(input: {
   today?: Date;
 }): CostMetrics {
   const paidForAccessories = input.accessories.reduce(
-    (sum, item) => sum + item.unitPriceMinor * item.totalQty,
+    (sum, item) => sum + item.unitPriceMinor * item.totalQty + (item.firstUnitExtraMinor ?? 0),
     0,
   );
   const usedAccessories = input.accessories.reduce(
-    (sum, item) => sum + item.unitPriceMinor * item.usedQty,
+    (sum, item) => sum + item.unitPriceMinor * item.usedQty + (item.usedQty > 0 ? item.firstUnitExtraMinor ?? 0 : 0),
     0,
   );
   const remainingStockMinor = paidForAccessories - usedAccessories;

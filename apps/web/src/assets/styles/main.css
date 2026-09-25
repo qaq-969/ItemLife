@@ -89,6 +89,10 @@ body {
     font-size: 0.95rem;
   }
 
+  select.field {
+    height: 2.75rem;
+  }
+
   .field:focus {
     border-color: var(--color-brand);
     outline: 2px solid var(--color-brand-soft);

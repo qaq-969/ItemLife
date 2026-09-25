@@ -5,6 +5,7 @@ import { ITEM_STATUSES, toMinor, toYuan, type ItemStatus } from '@itemlife/share
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
+import AppSelect from '@/components/AppSelect.vue';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
   in_use: '在役',
@@ -26,6 +27,7 @@ const ledger = useLedgerStore();
 
 const editingId = ref<string | null>(null);
 const isEdit = computed(() => editingId.value !== null);
+const priceFromLedger = ref(false);
 
 const form = reactive({
   name: '',
@@ -60,12 +62,18 @@ async function loadForEdit(id: string): Promise<void> {
   loading.value = true;
   try {
     const detail = await itemsApi.detail(id);
+    const bodyAllocations = detail.transactions.flatMap((transaction) =>
+      transaction.items
+        .filter((row) => row.itemId === detail.id && row.role === 'body')
+        .map((row) => row.amountMinor ?? transaction.amountMinor),
+    );
+    priceFromLedger.value = bodyAllocations.length > 0;
     editingId.value = id;
     Object.assign(form, {
       name: detail.name,
       categoryId: detail.categoryId ?? '',
       purchaseDate: detail.purchaseDate,
-      priceYuan: toYuan(detail.purchasePriceMinor),
+      priceYuan: toYuan(priceFromLedger.value ? bodyAllocations.reduce((sum, amount) => sum + amount, 0) : detail.purchasePriceMinor),
       expectedLifespanDays: detail.expectedLifespanDays === null ? '' : String(detail.expectedLifespanDays),
       status: detail.status,
       note: detail.note ?? '',
@@ -137,7 +145,7 @@ async function submit(): Promise<void> {
         name,
         categoryId: form.categoryId || null,
         purchaseDate: form.purchaseDate,
-        purchasePriceMinor,
+        ...(!priceFromLedger.value ? { purchasePriceMinor } : {}),
         expectedLifespanDays: lifespan ? Number(lifespan) : null,
         status: form.status,
         note: form.note.trim() || null,
@@ -179,7 +187,7 @@ onMounted(async () => {
     <header class="card p-5">
       <h1 class="text-lg font-semibold">{{ isEdit ? '编辑物品' : '录入物品' }}</h1>
       <p class="mt-1 text-xs text-ink-3">
-        本体价 + 配件批次就是成本指标的唯二来源；流水只用于展示与对账，不会重复计入。
+        已关联流水的价格由流水统一维护；这里管理物品资料与未关联流水时的回退价。
       </p>
     </header>
 
@@ -189,7 +197,7 @@ onMounted(async () => {
         <input id="item-name" v-model="form.name" class="field" maxlength="100" placeholder="电动牙刷" />
       </div>
 
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="label" for="item-price">本体价（元）</label>
           <input
@@ -198,7 +206,9 @@ onMounted(async () => {
             class="field tabular-nums"
             inputmode="decimal"
             placeholder="400.00"
+            :disabled="priceFromLedger"
           />
+          <p v-if="priceFromLedger" class="mt-1 text-xs text-ink-3">来自关联流水，请在流水的“查看与编辑”中改价。</p>
         </div>
         <div>
           <label class="label" for="item-date">购买日期</label>
@@ -209,10 +219,7 @@ onMounted(async () => {
       <div class="grid gap-3 sm:grid-cols-2">
         <div>
           <label class="label" for="item-category">分类（可选）</label>
-          <select id="item-category" v-model="form.categoryId" class="field">
-            <option value="">不分类</option>
-            <option v-for="node in categoryOptions" :key="node.id" :value="node.id">{{ node.name }}</option>
-          </select>
+          <AppSelect v-model="form.categoryId" :options="[{ value: '', label: '不分类' }, ...categoryOptions.map((node) => ({ value: node.id, label: node.name }))]" />
         </div>
         <div>
           <label class="label" for="item-lifespan">预期寿命（天，可选）</label>
@@ -227,14 +234,10 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="label" for="item-status">状态</label>
-          <select id="item-status" v-model="form.status" class="field">
-            <option v-for="status in ITEM_STATUSES" :key="status" :value="status">
-              {{ STATUS_LABELS[status] }}
-            </option>
-          </select>
+          <AppSelect v-model="form.status" :options="ITEM_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }))" />
         </div>
         <div>
           <label class="label" for="item-note">备注（可选）</label>

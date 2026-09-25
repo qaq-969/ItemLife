@@ -32,7 +32,20 @@ import { TransactionVo } from './dto/transaction.vo';
 const TRANSACTION_INCLUDE = {
   account: { select: { id: true, name: true, type: true } },
   category: { select: { id: true, name: true, icon: true, color: true } },
-  itemLinks: { select: { itemId: true, amountMinor: true, role: true, accessoryId: true } },
+  itemLinks: {
+    select: {
+      id: true,
+      itemId: true,
+      parentId: true,
+      name: true,
+      amountMinor: true,
+      role: true,
+      accessoryId: true,
+      item: { select: { name: true, deletedAt: true } },
+      accessory: { select: { name: true, unitPriceMinor: true, firstUnitExtraMinor: true, totalQty: true, usedQty: true, revertedQty: true } },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  },
 } satisfies Prisma.TransactionInclude;
 
 const IDEMPOTENCY_TTL_SECONDS = 24 * 3600;
@@ -49,6 +62,10 @@ function effectiveAmount(row: ResolvedAllocation, transactionAmountMinor: number
 interface ResolvedAllocation {
   /** 已有物品；内联新建的行先为 null，落库后回填 */
   itemId: IdBytes | null;
+  parentId: IdBytes | null;
+  key: string;
+  parentKey: string | null;
+  name: string | null;
   /** 引用同一笔流水内 newItem 键的临时引用 */
   itemRef: string | null;
   amountMinor: bigint | null;
@@ -202,6 +219,9 @@ export class TransactionsService {
           },
         });
         if (allocations) {
+          await this.syncAllocationTargets(tx, allocations);
+          // parent_id 使用 RESTRICT：先在同一事务内解开旧树，才能安全重建任意层级。
+          await tx.transactionItem.updateMany({ where: { transactionId: row.id }, data: { parentId: null } });
           await tx.transactionItem.deleteMany({ where: { transactionId: row.id } });
           await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt), row.createdBy);
           await this.writeAllocations(tx, row.id, allocations);
@@ -315,7 +335,6 @@ export class TransactionsService {
     const actorId = this.requireId(userId);
 
     await this.prisma.$transaction(async (tx) => {
-      await this.createInlineItems(tx, scope, id, allocations, occurredDate, dto.amountMinor);
       await tx.transaction.create({
         data: {
           id,
@@ -330,6 +349,8 @@ export class TransactionsService {
           createdBy: actorId,
         },
       });
+      // Item.purchaseTransactionId 有外键约束，必须在流水落库后再创建内联物品。
+      await this.createInlineItems(tx, scope, id, allocations, occurredDate, dto.amountMinor);
       await this.settleAccessoryBatches(tx, id, allocations, occurredDate, actorId);
       await this.writeAllocations(tx, id, allocations);
       await this.pinPurchaseTransactions(tx, id, allocations);
@@ -365,6 +386,7 @@ export class TransactionsService {
           ...this.scopes.filter(scope),
           name: row.newItem.name.trim(),
           categoryId: row.newItemCategoryId,
+          parentItemId: row.parentKey ? created.get(row.parentKey) ?? null : null,
           purchaseDate,
           purchasePriceMinor: BigInt(row.role === 'body' ? effectiveAmount(row, amountMinor) : 0),
           expectedLifespanDays: row.newItem.expectedLifespanDays ?? null,
@@ -374,6 +396,7 @@ export class TransactionsService {
         },
       });
       row.itemId = itemId;
+      created.set(row.key, itemId);
       if (row.newItem.key) created.set(row.newItem.key, itemId);
     }
 
@@ -407,7 +430,8 @@ export class TransactionsService {
             id,
             itemId: row.itemId,
             name: row.newAccessory.name?.trim() || DEFAULT_ACCESSORY_NAME,
-            unitPriceMinor: BigInt(amount / row.newAccessory.totalQty),
+            unitPriceMinor: BigInt(Math.floor(amount / row.newAccessory.totalQty)),
+            firstUnitExtraMinor: BigInt(amount % row.newAccessory.totalQty),
             totalQty: row.newAccessory.totalQty,
             usedQty,
             purchasedAt: parseDateOnly(row.newAccessory.purchasedAt) ?? fallbackDate,
@@ -440,16 +464,45 @@ export class TransactionsService {
     allocations: ResolvedAllocation[],
   ): Promise<void> {
     if (allocations.length === 0) return;
-    await tx.transactionItem.createMany({
-      data: allocations.map((row) => ({
-        id: newId(),
-        transactionId,
-        itemId: row.itemId!,
-        amountMinor: row.amountMinor,
-        role: row.role,
-        accessoryId: row.accessoryId,
-      })),
-    });
+    const ids = new Map(allocations.map((row) => [row.key, newId()]));
+    for (const row of allocations) {
+      const parentId = row.parentKey ? ids.get(row.parentKey) ?? null : row.parentId;
+      await tx.transactionItem.create({
+        data: { id: ids.get(row.key)!, transactionId, itemId: row.itemId!, parentId, name: row.name, amountMinor: row.amountMinor, role: row.role, accessoryId: row.accessoryId },
+      });
+    }
+  }
+
+  /** 流水编辑是金额事实入口：名称与未使用配件价格同步回物品实体。 */
+  private async syncAllocationTargets(tx: Prisma.TransactionClient, allocations: ResolvedAllocation[]): Promise<void> {
+    for (const row of allocations) {
+      const name = row.name?.trim();
+      if (name && row.itemId && (row.role === 'body' || row.role === 'link')) {
+        await tx.item.update({ where: { id: row.itemId }, data: { name } });
+      }
+      if (!row.accessoryId || row.role !== 'accessory') continue;
+      const batch = await tx.itemAccessory.findUniqueOrThrow({ where: { id: row.accessoryId } });
+      const amount = Number(row.amountMinor ?? 0n);
+      const currentAmount = Number(batch.unitPriceMinor) * batch.totalQty + Number(batch.firstUnitExtraMinor);
+      if (amount !== currentAmount && (batch.usedQty > 0 || batch.revertedQty > 0)) {
+        throw new ConflictException({
+          code: 'ACCESSORY_PRICE_LOCKED',
+          message: '该配件已有库存操作，不能改价；请用更正或撤销记录处理',
+        });
+      }
+      await tx.itemAccessory.update({
+        where: { id: row.accessoryId },
+        data: {
+          ...(name ? { name } : {}),
+          ...(amount !== currentAmount
+            ? {
+                unitPriceMinor: BigInt(Math.floor(amount / batch.totalQty)),
+                firstUnitExtraMinor: BigInt(amount % batch.totalQty),
+              }
+            : {}),
+        },
+      });
+    }
   }
 
   /** 本体采购流水指针：只在物品尚未指向任何采购流水时写入，避免覆盖首次记录。 */
@@ -481,12 +534,17 @@ export class TransactionsService {
     if (!items || items.length === 0) return [];
 
     const allowInline = options.allowInline ?? false;
-    const seenItems = new Set<string>();
-    const seenRefs = new Set<string>();
+    const seenRows = new Set<string>();
+    const lineKeys = new Set<string>();
     const inlineKeys = new Set<string>();
     const parsed: ResolvedAllocation[] = [];
 
     for (const raw of items) {
+      const key = raw.key?.trim() || `line-${parsed.length + 1}`;
+      if (lineKeys.has(key)) {
+        throw new BadRequestException({ code: 'DUPLICATE_LINE_KEY', message: '子账单临时键不能重复' });
+      }
+      lineKeys.add(key);
       const targets = [raw.itemId, raw.itemRef, raw.newItem].filter((value) => value !== undefined && value !== null);
       if (targets.length !== 1) {
         throw new BadRequestException({
@@ -511,10 +569,6 @@ export class TransactionsService {
             message: '编辑流水不支持内联新建物品或批次，请先在「物品」页录入',
           });
         }
-        if (seenRefs.has(raw.itemRef)) {
-          throw new BadRequestException({ code: 'DUPLICATE_ITEM', message: '同一物品只能分摊一次' });
-        }
-        seenRefs.add(raw.itemRef);
       }
 
       if (raw.newItem?.key) {
@@ -525,15 +579,12 @@ export class TransactionsService {
       }
 
       const itemId = raw.itemId ? this.requireId(raw.itemId) : null;
-      if (itemId) {
-        const key = bytesToUuid(itemId);
-        if (seenItems.has(key)) {
-          throw new BadRequestException({ code: 'DUPLICATE_ITEM', message: '同一物品只能分摊一次' });
-        }
-        seenItems.add(key);
-      }
-
       const role: AllocationRole = raw.role ?? (raw.newItem ? 'body' : 'link');
+      const rowKey = `${raw.itemId ?? raw.itemRef ?? raw.newItem?.key ?? raw.newItem?.name ?? ''}:${role}:${raw.accessoryId ?? raw.newAccessory?.name ?? ''}`;
+      if (seenRows.has(rowKey)) {
+        throw new BadRequestException({ code: 'DUPLICATE_ALLOCATION', message: '同一物品、用途和配件批次不能重复分摊' });
+      }
+      seenRows.add(rowKey);
       // 新建物品那一行只能承载本体或附加费用；itemRef 行可以给该物品补配件
       if (raw.newItem && role !== 'body' && role !== 'fee') {
         throw new BadRequestException({
@@ -589,6 +640,10 @@ export class TransactionsService {
 
       parsed.push({
         itemId,
+        parentId: raw.parentId ? this.requireId(raw.parentId) : null,
+        key,
+        parentKey: raw.parentKey?.trim() || null,
+        name: raw.name?.trim() || null,
         itemRef: raw.itemRef?.trim() ?? null,
         amountMinor: amount,
         role,
@@ -615,6 +670,25 @@ export class TransactionsService {
       }
     }
 
+    for (const row of parsed) {
+      if (row.parentKey && !lineKeys.has(row.parentKey)) {
+        throw new BadRequestException({ code: 'PARENT_LINE_UNKNOWN', message: '子账单的父级不在本次记账中' });
+      }
+      if (row.parentKey === row.key) {
+        throw new BadRequestException({ code: 'PARENT_LINE_INVALID', message: '子账单不能把自己作为父级' });
+      }
+    }
+    const parentOf = new Map(parsed.map((row) => [row.key, row.parentKey]));
+    for (const row of parsed) {
+      const visited = new Set<string>();
+      let cursor: string | null | undefined = row.key;
+      while (cursor) {
+        if (visited.has(cursor)) throw new BadRequestException({ code: 'PARENT_LINE_CYCLE', message: '子账单不能形成循环引用' });
+        visited.add(cursor);
+        cursor = parentOf.get(cursor);
+      }
+    }
+
     await this.verifyAllocationTargets(scope, parsed, options);
 
     const allocations = parsed.map((item) => ({
@@ -635,7 +709,11 @@ export class TransactionsService {
     rows: ResolvedAllocation[],
     options: { currentTransactionId?: IdBytes },
   ): Promise<void> {
-    const itemIds = rows.flatMap((row) => (row.itemId ? [row.itemId] : []));
+    // 同一关联物品可以承接任意层级的多个子项；查询结果按主键去重，
+    // 因此校验输入也必须去重，不能把一件物品误判成多个不存在的物品。
+    const itemIds = [...new Map(
+      rows.flatMap((row) => (row.itemId ? [[bytesToUuid(row.itemId), row.itemId] as const] : [])),
+    ).values()];
     if (itemIds.length > 0) {
       const found = await this.prisma.item.findMany({
         where: { ...this.scopes.filter(scope), id: { in: itemIds }, deletedAt: null },
@@ -674,7 +752,10 @@ export class TransactionsService {
           message: '该批次已绑定其他流水，不能重复挂账',
         });
       }
-      assertAccessoryAmountMatches(Number(row.amountMinor ?? 0n), Number(batch.unitPriceMinor), batch.totalQty);
+      const editingCurrentBatch = current !== null && boundTo === current;
+      if (!editingCurrentBatch) {
+        assertAccessoryAmountMatches(Number(row.amountMinor ?? 0n), Number(batch.unitPriceMinor), batch.totalQty, Number(batch.firstUnitExtraMinor));
+      }
     }
   }
 
@@ -808,26 +889,19 @@ function invalidRange(message = '日期格式不正确，应为 YYYY-MM-DD'): Ba
 }
 
 /**
- * 批次金额一致性（Q9 定案：硬拦 409，不做静默纠正）。
- * unitPriceMinor 为 null 表示批次当场新建、单价待反算，此时要求「金额 ÷ 数量」整除。
+ * 批次金额一致性：新建批次允许除不尽，余数会自动归入第一件配件。
  */
 function assertAccessoryAmountMatches(
   amountMinor: number,
   unitPriceMinor: number | null,
   totalQty: number,
+  firstUnitExtraMinor = 0,
 ): void {
   if (unitPriceMinor === null) {
-    const remainder = amountMinor % totalQty;
-    if (remainder !== 0) {
-      throw new ConflictException({
-        code: 'ACCESSORY_AMOUNT_MISMATCH',
-        message: `金额 ${formatMoney(amountMinor)} ÷ ${totalQty} 个除不尽（余 ${formatMoney(remainder)}），请调整金额或数量`,
-      });
-    }
     return;
   }
 
-  const expected = unitPriceMinor * totalQty;
+  const expected = unitPriceMinor * totalQty + firstUnitExtraMinor;
   if (expected !== amountMinor) {
     throw new ConflictException({
       code: 'ACCESSORY_AMOUNT_MISMATCH',

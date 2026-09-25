@@ -87,10 +87,33 @@ export class InlineAccessoryDto {
 
 /** 分摊金额单位为分；null 仅在「单物品」时允许，表示继承整笔流水金额。 */
 export class TransactionItemDto {
+  @ApiPropertyOptional({ description: '本行临时键；供 parentKey 表达同一笔流水的任意层级' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 32)
+  key?: string;
+
+  @ApiPropertyOptional({ description: '父行临时键；省略即一级子账单' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 32)
+  parentKey?: string;
+
+  @ApiPropertyOptional({ description: '子账单名称；附加费用必填，编辑时也用于同步物品或配件名称' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
   @ApiPropertyOptional({ description: '已有物品 ID；与 itemRef / newItem 三选一' })
   @IsOptional()
   @IsUUID()
   itemId?: string;
+
+  @ApiPropertyOptional({ description: '已存在父子账单 ID；编辑已有流水时使用，新增推荐 parentKey' })
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
 
   @ApiPropertyOptional({ description: '引用本笔流水内 newItem 临时键创建的物品；三选一' })
   @IsOptional()

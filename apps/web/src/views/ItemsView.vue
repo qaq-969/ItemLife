@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router';
 import { ITEM_STATUSES, formatMoney, type ItemDto, type ItemStatus, type ItemsOverviewDto } from '@itemlife/shared';
 import { itemsApi, type ItemQuery } from '@/api/items';
 import { ApiError } from '@/api/http';
+import AppSelect from '@/components/AppSelect.vue';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
   in_use: '在役',
@@ -69,11 +70,12 @@ function showMessage(text: string): void {
 }
 
 async function remove(item: ItemDto): Promise<void> {
-  if (!window.confirm(`删除物品「${item.name}」？历史流水与配件记录会保留。`)) return;
+  const reason = window.prompt(`撤销物品「${item.name}」会保留历史流水。请填写原因：`);
+  if (!reason?.trim()) return;
   errorText.value = null;
   try {
-    await itemsApi.remove(item.id);
-    showMessage('物品已删除');
+    await itemsApi.remove(item.id, { reason: reason.trim() });
+    showMessage('已生成物品撤销记录');
     await reload();
   } catch (error) {
     errorText.value = error instanceof ApiError ? error.message : '删除失败，请重试';
@@ -102,7 +104,7 @@ onMounted(() => {
             {{ formatMoney(board?.remainingStockMinor ?? 0) }}
           </p>
         </div>
-        <RouterLink :to="{ name: 'item-new' }" class="btn btn-primary">录入物品</RouterLink>
+        <RouterLink :to="{ name: 'transaction-new', query: { addItem: '1' } }" class="btn btn-primary">记一笔并录入物品</RouterLink>
       </div>
 
       <div class="mt-4 flex flex-wrap gap-2">
@@ -139,12 +141,7 @@ onMounted(() => {
     <div class="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
       <div class="sm:w-40">
         <label class="label" for="item-status">状态</label>
-        <select id="item-status" v-model="filters.status" class="field" @change="reload">
-          <option value="">全部</option>
-          <option v-for="status in ITEM_STATUSES" :key="status" :value="status">
-            {{ STATUS_LABELS[status] }}
-          </option>
-        </select>
+        <AppSelect v-model="filters.status" :options="[{ value: '', label: '全部' }, ...ITEM_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }))]" />
       </div>
       <div class="flex-1">
         <label class="label" for="item-keyword">名称</label>

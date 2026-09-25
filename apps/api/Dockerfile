@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ---------------- 构建阶段 ----------------
 FROM node:24-alpine AS builder
 
@@ -8,6 +6,7 @@ WORKDIR /repo
 
 # 1) 依赖层（利用构建缓存）
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/postinstall.mjs scripts/postinstall.mjs
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
@@ -49,6 +48,7 @@ RUN corepack enable
 WORKDIR /repo
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY scripts/postinstall.mjs scripts/postinstall.mjs
 COPY packages/shared/package.json packages/shared/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile

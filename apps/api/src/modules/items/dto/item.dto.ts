@@ -193,3 +193,23 @@ export class AccessoryQtyDto {
   @Max(MAX_QTY)
   qty?: number;
 }
+
+/** 撤销库存会保留原始采购和流水，只新增一条凭据。 */
+export class InventoryRevertDto {
+  @ApiPropertyOptional({ enum: ['dispose', 'correction'], default: 'dispose' })
+  @IsOptional()
+  @IsIn(['dispose', 'correction'])
+  kind?: 'dispose' | 'correction';
+
+  @ApiProperty({ maxLength: 200 })
+  @IsString()
+  @Length(1, 200)
+  reason!: string;
+
+  @ApiPropertyOptional({ description: '配件撤销数量；省略时撤销全部可用库存' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_QTY)
+  qty?: number;
+}

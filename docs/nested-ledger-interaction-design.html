@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ItemLife · 多级子账单交互设计稿</title>
+<style>
+  :root { --ink:#172033; --muted:#667085; --line:#e5e7eb; --bg:#f6f7fb; --card:#fff; --brand:#4f46e5; --brand-soft:#eef2ff; --green:#047857; --green-soft:#ecfdf5; --amber:#a16207; --amber-soft:#fffbeb; --red:#b42318; --red-soft:#fff1f2; }
+  * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  header { padding:54px 24px 42px; color:#fff; background:linear-gradient(125deg,#3730a3,#4f46e5 58%,#6366f1); }
+  header>div,.wrap { max-width:1120px; margin:auto; } .eyebrow { margin:0 0 8px; color:#c7d2fe; font-size:13px; font-weight:700; letter-spacing:.06em; } h1 { margin:0; font-size:32px; line-height:1.2; } .sub { max-width:760px; margin:14px 0 0; color:#e0e7ff; font-size:17px; }
+  .wrap { padding:28px 24px 80px; } section { margin:22px 0; padding:26px; border:1px solid var(--line); border-radius:16px; background:var(--card); box-shadow:0 2px 8px rgb(15 23 42 / .03); } h2 { margin:0 0 14px; font-size:21px; } h3 { margin:22px 0 10px; font-size:16px; } p { margin:8px 0; } .lead { color:var(--muted); }
+  .note { padding:13px 15px; border-radius:10px; background:var(--brand-soft); color:#312e81; } .warning { padding:13px 15px; border-radius:10px; background:var(--amber-soft); color:#854d0e; }
+  .grid { display:grid; gap:16px; } .g3 { grid-template-columns:repeat(3,1fr); } .g2 { grid-template-columns:repeat(2,1fr); } .cell { padding:16px; border:1px solid var(--line); border-radius:12px; } .cell b { display:block; margin-bottom:5px; } .small { color:var(--muted); font-size:13px; }
+  .screen { overflow:hidden; border:1px solid #d8dbe5; border-radius:16px; background:#f8fafc; box-shadow:0 12px 28px rgb(15 23 42 / .09); } .bar { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; background:white; border-bottom:1px solid var(--line); font-weight:700; } .content { padding:18px; }
+  .form-grid { display:grid; grid-template-columns:1.1fr .95fr .95fr; gap:10px; } .field { min-height:44px; padding:10px 12px; border:1px solid #d8dbe5; border-radius:9px; background:white; color:#475467; } .field b { display:block; color:var(--ink); font-size:13px; } .amount { font-size:18px; font-weight:750; color:var(--ink); } .section-title { display:flex; align-items:center; justify-content:space-between; margin:20px 0 10px; font-weight:750; } button,.button { display:inline-flex; align-items:center; justify-content:center; min-height:36px; padding:7px 11px; border:1px solid #c7d2fe; border-radius:8px; background:white; color:#4338ca; font:inherit; font-size:13px; font-weight:700; } .button.primary { border-color:var(--brand); background:var(--brand); color:white; }
+  .tree { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:white; } .node { position:relative; display:grid; grid-template-columns:26px minmax(0,1fr) 120px 108px 28px; gap:8px; align-items:center; min-height:56px; padding:8px 12px; border-bottom:1px solid #eef0f4; } .node:last-child { border-bottom:0; } .node.child { padding-left:40px; background:#fcfcff; } .node.grandchild { padding-left:68px; background:#f8f9ff; } .branch { color:#98a2b3; } .node-name { min-width:0; } .node-name b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .role { display:inline-block; width:max-content; margin-top:2px; padding:1px 6px; border-radius:99px; background:#eef2ff; color:#4338ca; font-size:11px; font-weight:700; } .role.stock { background:#ecfdf5; color:#047857; } .role.link { background:#f2f4f7; color:#475467; } .node .sum { text-align:right; font-variant-numeric:tabular-nums; font-weight:700; } .more { color:#667085; font-size:20px; text-align:center; }
+  .footer-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; } .total { color:#475467; font-size:13px; } .total strong { color:var(--ink); font-size:16px; } .revert { border-color:#fecaca; background:var(--red-soft); color:var(--red); }
+  table { width:100%; border-collapse:collapse; } th,td { padding:11px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; } th { color:#475467; background:#f8fafc; font-size:13px; } code { padding:1px 4px; border-radius:4px; background:#f2f4f7; color:#344054; } .flow { display:flex; flex-wrap:wrap; align-items:stretch; gap:8px; } .flow div { flex:1 1 150px; padding:13px; border:1px solid var(--line); border-radius:10px; background:#fff; } .flow b { display:block; } .arrow { align-self:center; flex:0 0 auto!important; border:0!important; background:transparent!important; color:#667085; font-size:20px; }
+  @media(max-width:700px) { header { padding:38px 18px 30px; } h1 { font-size:26px; } .wrap { padding:16px 14px 50px; } section { padding:18px; } .g3,.g2,.form-grid { grid-template-columns:1fr; } .node { grid-template-columns:20px minmax(0,1fr) 88px 22px; } .node .role { display:none; } .node .field { display:none; } .node.child { padding-left:30px; } .node.grandchild { padding-left:42px; } .footer-row { align-items:flex-start; flex-direction:column; } }
+</style>
+</head>
+<body>
+<header><div><p class="eyebrow">交互设计报告 · 2026-09-25</p><h1>多级子账单与物品树</h1><p class="sub">每一次付款只是一条根流水；商品、物品、配件与附件都作为可展开的归属节点。删除不会抹账，而是生成可追溯的 revert。</p></div></header>
+<main class="wrap">
+  <section>
+    <h2>设计结论</h2>
+    <p class="lead">“记一笔”是唯一创建入口；物品页只负责查询、使用、维护结构和发起调整。子账单不是第二笔钱，而是根流水内部的金额归属树。这样账户余额只由根流水变动一次，物品成本却能精确追溯到任意层附件。</p>
+    <div class="grid g3"><div class="cell"><b>一笔钱，一条根流水</b><span class="small">根节点记录账户、分类、时间、付款金额；只有它影响现金余额。</span></div><div class="cell"><b>任意层子账单</b><span class="small">一件物品可有附件，附件也可再有附件；每个节点都可继续拆分金额与数量。</span></div><div class="cell"><b>删改留痕</b><span class="small">删除库存生成 revert 链；原始采购、使用和调整记录仍可在流水中查看。</span></div></div>
+  </section>
+
+  <section>
+    <h2>主界面：记一笔</h2><p class="lead">默认是普通账。点击“关联物品”才展开子账单树，避免日常消费被复杂表单干扰。</p>
+    <div class="screen"><div class="bar"><span>记一笔</span><span class="small">支出</span></div><div class="content">
+      <div class="form-grid"><div class="field"><b>金额</b><span class="amount">¥ 640.00</span></div><div class="field"><b>账户</b>信用卡</div><div class="field"><b>分类</b>日用百货</div></div>
+      <div class="section-title"><span>这笔钱归属到什么？</span><span class="small">已归属 ¥640.00 · 未归属 ¥0.00</span></div>
+      <div class="tree">
+        <div class="node"><span class="branch">⌄</span><div class="node-name"><b>电动牙刷套装</b><span class="role">新物品 · 本体</span></div><div class="field">用途：本体</div><div class="sum">¥400.00</div><span class="more">⋮</span></div>
+        <div class="node child"><span class="branch">⌄</span><div class="node-name"><b>替换刷头</b><span class="role stock">配件 · 12 个</span></div><div class="field">用途：配件</div><div class="sum">¥240.00</div><span class="more">⋮</span></div>
+        <div class="node grandchild"><span class="branch">•</span><div class="node-name"><b>刷头保护套</b><span class="role link">附件 · 归属说明</span></div><div class="field">用途：仅关联</div><div class="sum">¥0.00</div><span class="more">⋮</span></div>
+      </div>
+      <div class="footer-row"><div><button>＋ 添加已有物品</button> <button>＋ 新建物品</button> <button>＋ 添加附件</button></div><button class="button primary">保存流水</button></div>
+    </div></div>
+    <p class="note"><b>交互要点：</b>每一行既是子账单又是物品节点。选“配件”时，数量为必填，单价由金额 ÷ 数量自动得出；选“本体 / 附加费用”时不显示库存数量；选“仅关联”时金额不进入成本。</p>
+  </section>
+
+  <section>
+    <h2>树的行为与层级规则</h2>
+    <div class="flow"><div><b>根流水</b><span class="small">付款 ¥640<br>影响账户余额</span></div><div class="arrow">→</div><div><b>一级子账单</b><span class="small">物品本体 ¥400<br>进入物品成本</span></div><div class="arrow">→</div><div><b>二级子账单</b><span class="small">配件 ¥240 / 12 个<br>产生库存</span></div><div class="arrow">→</div><div><b>三级及以下</b><span class="small">继续归属或说明<br>不重复记现金</span></div></div>
+    <table><thead><tr><th>动作</th><th>界面反馈</th><th>账务规则</th></tr></thead><tbody>
+      <tr><td>添加子账单</td><td>在当前节点下插入一行，自动带入父物品上下文。</td><td>子节点金额不能使同一根流水的已归属金额超过付款金额。</td></tr>
+      <tr><td>添加附件</td><td>以缩进树行显示；可继续加子节点，支持折叠。</td><td>附件可为库存、附加费用或仅关联；不新建额外付款。</td></tr>
+      <tr><td>移动节点</td><td>“更多”菜单选择新的父节点，先预览金额和成本影响。</td><td>禁止把节点移动到自己的后代，避免循环；保留变更审计。</td></tr>
+      <tr><td>修改已使用库存</td><td>显示“创建调整”而非直接改数量。</td><td>已有消耗记录时不可静默重写单价、数量和来源。</td></tr>
+    </tbody></table>
+  </section>
+
+  <section>
+    <h2>物品页：管理而非录入</h2>
+    <div class="screen"><div class="bar"><span>物品 · 电动牙刷</span><span class="small">来自流水 #20260925-001</span></div><div class="content">
+      <div class="grid g2"><div class="cell"><b>当前持有成本 ¥440.00</b><span class="small">本体 ¥400 + 已用刷头 ¥40</span></div><div class="cell"><b>剩余库存 ¥200.00</b><span class="small">刷头余 10 个 · 可展开管理</span></div></div>
+      <div class="section-title"><span>结构与来源</span><button>在「记一笔」中追加</button></div>
+      <div class="tree"><div class="node"><span class="branch">⌄</span><div class="node-name"><b>电动牙刷</b><span class="role">来源 #20260925-001</span></div><div class="field">在役</div><div class="sum">¥400.00</div><span class="more">⋮</span></div><div class="node child"><span class="branch">⌄</span><div class="node-name"><b>替换刷头 · 余 10 / 12</b><span class="role stock">库存批次</span></div><div class="field">已用 2</div><div class="sum">¥240.00</div><span class="more">⋮</span></div></div>
+      <div class="footer-row"><span class="small">删除、停用、消耗与撤销都写入来源流水的审计时间线。</span><button class="revert">创建 revert 调整</button></div>
+    </div></div>
+  </section>
+
+  <section>
+    <h2>删除库存：revert，而不是删除历史</h2>
+    <p class="lead">“删除”统一改名为“创建 revert 调整”。它会生成一条反向引用原节点的记录，并在流水、物品详情、库存记录中都可点击查看。原始记录永远保留。</p>
+    <div class="grid g2"><div class="cell"><b>无现金退款：报废 / 录入错误</b><p class="small">新建内部库存调整：减少该批次剩余数量与库存价值，不改变账户余额；根流水时间线显示“已由 revert #R-002 调整”。</p></div><div class="cell"><b>有现金退款：退货 / 商家返款</b><p class="small">新建一笔收入或原支出的冲销流水，选择收款账户并引用原采购；账户余额和物品成本同时按规则回退。</p></div></div>
+    <div class="warning"><b>不可直接删除的场景：</b>节点已有下级、配件已被消耗、已存在退款或被其他调整引用时，界面只提供“创建 revert”或“先处理子节点”，不提供物理删除。</div>
+  </section>
+
+  <section>
+    <h2>数据与实现约束</h2>
+    <table><thead><tr><th>对象</th><th>建议结构</th><th>目的</th></tr></thead><tbody>
+      <tr><td>根流水</td><td>保留现有 <code>transactions</code>；仅根节点有账户和现金方向。</td><td>账户余额、分类统计和支付事实不重复。</td></tr>
+      <tr><td>子账单节点</td><td>新增可自引用的归属节点：<code>parent_node_id</code>、金额、用途、物品/批次引用、排序与状态。</td><td>表达任意层物品、附件和费用树。</td></tr>
+      <tr><td>物品结构</td><td>物品增加可空 <code>parent_item_id</code>；库存批次仍保留数量、单价和消耗审计。</td><td>让物品页按同一树查看，但不将父子关系误当作新的付款。</td></tr>
+      <tr><td>revert</td><td>记录 <code>reverts_node_id</code>、原因、创建人和时间；退款额外引用原根流水。</td><td>审计可追溯，避免改写历史。</td></tr>
+    </tbody></table>
+  </section>
+
+  <section><h2>全局控件与响应式约束</h2><p class="lead">所有页面的选择器、单选、多选、开关、日期时间选择和弹窗均使用项目自定义组件；禁止新增原生 <code>select</code>。文本、金额和数量输入保留原生输入语义，但统一由项目样式和校验规则呈现。</p><div class="grid g3"><div class="cell"><b>移动端</b><span class="small">表单优先采用两列栅格；名称、备注等长文本可独占一行。操作按钮按内容收缩，不强制占半行。</span></div><div class="cell"><b>桌面端</b><span class="small">表单容器设置最大宽度；树节点用连接线、层级标签和缩进表达关系，避免横向空白拉伸。</span></div><div class="cell"><b>统一组件</b><span class="small">AppSelect、AppCheckbox、AppRadioGroup、AppDateTimePicker、AppModal 全站复用，保证键盘与触屏行为一致。</span></div></div></section>
+  <section><h2>建议实施顺序</h2><div class="grid g3"><div class="cell"><b>第一期：交互骨架</b><span class="small">记一笔展开子账单树；物品页移除“录入物品”入口，改为“在记一笔中追加”。</span></div><div class="cell"><b>第二期：递归模型</b><span class="small">引入节点父子关系、同级排序、任意层附件，以及根流水不重复入账的校验。</span></div><div class="cell"><b>第三期：revert</b><span class="small">处理报废、退货、数量调整和历史关联视图；为已使用库存增加强约束。</span></div></div></section>
+</main>
+</body>
+</html>

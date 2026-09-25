@@ -15,10 +15,22 @@ export interface TransactionRelations {
   account?: { id: Uint8Array; name: string; type: AccountType } | null;
   category?: { id: Uint8Array; name: string; icon: string | null; color: string | null } | null;
   itemLinks?: Array<{
+    id: Uint8Array;
     itemId: Uint8Array;
+    parentId: Uint8Array | null;
+    name: string | null;
     amountMinor: bigint | null;
     role: AllocationRole;
     accessoryId: Uint8Array | null;
+    item?: { name: string; deletedAt: Date | null };
+    accessory: {
+      name: string;
+      unitPriceMinor: bigint;
+      firstUnitExtraMinor: bigint;
+      totalQty: number;
+      usedQty: number;
+      revertedQty: number;
+    } | null;
   }>;
 }
 
@@ -113,10 +125,20 @@ export class TransactionVo implements TransactionDto {
     vo.systemTag = row.systemTag;
     vo.transferGroupId = row.transferGroupId ? bytesToUuid(row.transferGroupId) : null;
     vo.items = (row.itemLinks ?? []).map((link) => ({
+      id: bytesToUuid(link.id),
       itemId: bytesToUuid(link.itemId),
+      parentId: link.parentId ? bytesToUuid(link.parentId) : null,
+      name: link.accessory?.name ?? (link.role === 'fee' ? link.name || '附加费用' : link.item?.name ?? link.name ?? '物品'),
+      itemName: link.item?.name ?? link.name ?? '物品',
+      itemDeletedAt: link.item?.deletedAt?.toISOString() ?? null,
       amountMinor: link.amountMinor === null ? null : Number(link.amountMinor),
       role: link.role,
       accessoryId: link.accessoryId ? bytesToUuid(link.accessoryId) : null,
+      quantity: link.accessory?.totalQty ?? null,
+      unitPriceMinor: link.accessory ? Number(link.accessory.unitPriceMinor) : null,
+      firstUnitExtraMinor: Number(link.accessory?.firstUnitExtraMinor ?? 0n),
+      usedQty: link.accessory?.usedQty ?? null,
+      revertedQty: link.accessory?.revertedQty ?? null,
     }));
     vo.createdAt = row.createdAt.toISOString();
     return vo;

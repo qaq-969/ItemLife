@@ -68,7 +68,13 @@ export interface CategoryOrderItem {
 }
 
 export interface TransactionAllocation {
-  itemId: string;
+  key?: string;
+  parentKey?: string;
+  itemId?: string;
+  name?: string;
+  newItem?: { key: string; name: string };
+  role?: 'body' | 'fee' | 'accessory' | 'link';
+  accessoryId?: string;
   /** null = 继承整笔金额（仅单物品时允许） */
   amountMinor?: number | null;
 }
@@ -99,6 +105,7 @@ export interface TransactionQuery {
   type?: TransactionType;
   accountId?: string;
   categoryId?: string;
+  itemId?: string;
   /** YYYY-MM-DD（含） */
   from?: string;
   /** YYYY-MM-DD（含） */

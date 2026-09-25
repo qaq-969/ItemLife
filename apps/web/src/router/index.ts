@@ -50,12 +50,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '物品', nav: 'items' },
       },
       {
-        path: 'items/new',
-        name: 'item-new',
-        component: () => import('@/views/ItemFormView.vue'),
-        meta: { title: '录入物品' },
-      },
-      {
         path: 'items/:id',
         name: 'item-detail',
         component: () => import('@/views/ItemDetailView.vue'),

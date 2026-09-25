@@ -66,6 +66,12 @@ enum AllocationRole {
   link
 }
 
+enum InventoryRevertKind {
+  dispose
+  correction
+  refund
+}
+
 // ---------------------------------------------------------------- 认证与用户
 
 model User {
@@ -90,6 +96,7 @@ model User {
   createdInvites    HouseholdInvite[] @relation("InviteCreator")
   createdTransactions Transaction[]   @relation("TransactionCreator")
   accessoryUsages     AccessoryUsage[]
+  inventoryReverts   InventoryRevert[]
 
   @@map("users")
 }
@@ -256,6 +263,8 @@ model Transaction {
   accessoryBatches ItemAccessory[]
   // 以本笔流水作为「本体采购流水」的物品
   purchasedItems Item[] @relation("ItemPurchaseTransaction")
+  inventoryRevertSources InventoryRevert[] @relation("InventoryRevertSource")
+  inventoryRevertCash    InventoryRevert[] @relation("InventoryRevertCash")
 
   @@index([ownerType, ownerId, occurredAt])
   @@index([accountId, type, amountMinor])
@@ -269,6 +278,9 @@ model TransactionItem {
   id            Bytes          @id @db.Binary(16)
   transactionId Bytes          @map("transaction_id") @db.Binary(16)
   itemId        Bytes          @map("item_id") @db.Binary(16)
+  parentId      Bytes?         @map("parent_id") @db.Binary(16)
+  /// 行名称快照：附加费用必须保存；物品与配件展示时优先读取实时实体名称
+  name          String?        @db.VarChar(100)
   amountMinor   BigInt?        @map("amount_minor")
   /// 这笔钱算在本体 / 附加费用 / 配件 / 仅关联；默认 link，保证历史数据不进成本口径
   role          AllocationRole @default(link)
@@ -279,10 +291,13 @@ model TransactionItem {
   transaction Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
   item        Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
   accessory   ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  parent      TransactionItem?  @relation("TransactionItemTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    TransactionItem[] @relation("TransactionItemTree")
 
-  @@unique([transactionId, itemId])
+  @@unique([transactionId, itemId, role, accessoryId])
   @@index([itemId, createdAt])
   @@index([accessoryId])
+  @@index([parentId])
   @@map("transaction_items")
 }
 
@@ -294,6 +309,7 @@ model Item {
   ownerId              Bytes      @map("owner_id") @db.Binary(16)
   name                 String     @db.VarChar(100)
   categoryId           Bytes?     @map("category_id") @db.Binary(16)
+  parentItemId         Bytes?     @map("parent_item_id") @db.Binary(16)
   purchaseDate         DateTime   @map("purchase_date") @db.Date
   /// 回退价（分）：仅当物品没有任何 body/fee 分摊时参与成本计算（见联动调整方案 §5.2）
   purchasePriceMinor   BigInt     @map("purchase_price_minor")
@@ -309,11 +325,15 @@ model Item {
 
   accessories     ItemAccessory[]
   accessoryUsages AccessoryUsage[]
+  inventoryReverts InventoryRevert[]
   transactionLinks TransactionItem[]
+  parentItem       Item?           @relation("ItemTree", fields: [parentItemId], references: [id], onDelete: Restrict)
+  childItems       Item[]          @relation("ItemTree")
   purchaseTransaction Transaction? @relation("ItemPurchaseTransaction", fields: [purchaseTransactionId], references: [id], onDelete: SetNull)
 
   @@index([ownerType, ownerId, status])
   @@index([categoryId])
+  @@index([parentItemId])
   @@map("items")
 }
 
@@ -322,8 +342,11 @@ model ItemAccessory {
   itemId         Bytes    @map("item_id") @db.Binary(16)
   name           String   @db.VarChar(60)
   unitPriceMinor BigInt   @map("unit_price_minor")
+  /// 批次总额除以数量的余数，全部计入第一件配件，确保金额精确守恒
+  firstUnitExtraMinor BigInt @default(0) @map("first_unit_extra_minor")
   totalQty       Int      @map("total_qty")
   usedQty        Int      @default(0) @map("used_qty")
+  revertedQty    Int      @default(0) @map("reverted_qty")
   /// 配件购入日期：同一物品可分批入库，成本按批次单价计算
   purchasedAt    DateTime @map("purchased_at") @db.Date
   /// 首次入库的购买流水（快捷指针，从流水侧反查请用 TransactionItem.accessoryId）
@@ -335,9 +358,33 @@ model ItemAccessory {
   transaction      Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
   transactionLinks TransactionItem[]
   usages           AccessoryUsage[]
+  reverts          InventoryRevert[]
 
   @@index([itemId])
   @@map("item_accessories")
+}
+
+model InventoryRevert {
+  id                  Bytes               @id @db.Binary(16)
+  itemId              Bytes               @map("item_id") @db.Binary(16)
+  accessoryId         Bytes?              @map("accessory_id") @db.Binary(16)
+  sourceTransactionId Bytes?              @map("source_transaction_id") @db.Binary(16)
+  cashTransactionId   Bytes?              @map("cash_transaction_id") @db.Binary(16)
+  kind                InventoryRevertKind
+  qty                 Int?
+  reason              String               @db.VarChar(200)
+  createdBy           Bytes                @map("created_by") @db.Binary(16)
+  createdAt           DateTime             @default(now()) @map("created_at")
+
+  item              Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  accessory         ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  sourceTransaction Transaction?   @relation("InventoryRevertSource", fields: [sourceTransactionId], references: [id], onDelete: SetNull)
+  cashTransaction   Transaction?   @relation("InventoryRevertCash", fields: [cashTransactionId], references: [id], onDelete: SetNull)
+  actor             User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([itemId, createdAt])
+  @@index([accessoryId, createdAt])
+  @@map("inventory_reverts")
 }
 
 /// 配件使用审计：每次「使用一个 / 撤销一个」写入一行，可追溯谁在什么时候用掉了一枚（设计报告 5.2 ⑩）。
