@@ -4,8 +4,8 @@ import { Throttle } from '@nestjs/throttler';
 import type { Paginated } from '@itemlife/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-user';
-import { AccessoryQtyDto, CreateAccessoryDto, CreateItemDto, InventoryRevertDto, ListItemsQueryDto, UpdateItemDto } from './dto/item.dto';
-import { AccessoryUsageVo, AccessoryVo, ItemDetailVo, ItemsOverviewVo, ItemVo } from './dto/item.vo';
+import { AccessoryQtyDto, CreateItemDto, InventoryRevertDto, ListItemsQueryDto, UpdateItemDto } from './dto/item.dto';
+import { AccessoryUsageVo, ItemDetailVo, ItemsOverviewVo, ItemVo } from './dto/item.vo';
 import { ItemsService } from './items.service';
 
 @ApiBearerAuth()
@@ -55,16 +55,6 @@ export class ItemsController {
     return this.items.remove(user.id, id, dto);
   }
 
-  @Post(':id/accessories')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: '添加配件批次：名称 / 单价 / 数量 / 购入日期（可关联购买流水）' })
-  addAccessory(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CreateAccessoryDto,
-  ): Promise<AccessoryVo> {
-    return this.items.addAccessory(user.id, id, dto);
-  }
 }
 
 @ApiBearerAuth()
@@ -74,7 +64,7 @@ export class AccessoriesController {
   constructor(private readonly items: ItemsService) {}
 
   @Delete(':id')
-  @ApiOperation({ summary: '撤销配件库存：保留批次、购买流水与撤销凭据' })
+  @ApiOperation({ summary: '删除配件批次：清除使用记录并同步扣减来源流水金额' })
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: InventoryRevertDto): Promise<null> {
     return this.items.removeAccessory(user.id, id, dto);
   }

@@ -1,5 +1,4 @@
 import type {
-  AccessoryDto,
   AccessoryUsageDto,
   ItemDetailDto,
   ItemDto,
@@ -68,8 +67,6 @@ export const itemsApi = {
   update: (id: string, payload: ItemPatch) => unwrap<ItemDto>(http.patch(`/items/${id}`, payload)),
   remove: (id: string, payload: InventoryRevertPayload) => unwrap<null>(http.delete(`/items/${id}`, { data: payload })),
 
-  addAccessory: (itemId: string, payload: AccessoryPayload) =>
-    unwrap<AccessoryDto>(http.post(`/items/${itemId}/accessories`, payload)),
   removeAccessory: (id: string, payload: InventoryRevertPayload) => unwrap<null>(http.delete(`/accessories/${id}`, { data: payload })),
   /** 使用 n 个配件（默认 1）：不可超过剩余 */
   consume: (id: string, qty = 1) => unwrap<AccessoryUsageDto>(http.post(`/accessories/${id}/consume`, { qty })),

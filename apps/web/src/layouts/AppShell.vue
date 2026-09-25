@@ -114,7 +114,11 @@ async function handleLogout(): Promise<void> {
       <main
         class="mx-auto w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
-        <RouterView />
+        <RouterView v-slot="{ Component, route: currentRoute }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="String(currentRoute.name)" />
+          </Transition>
+        </RouterView>
       </main>
     </div>
 

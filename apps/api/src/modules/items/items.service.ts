@@ -5,9 +5,9 @@ import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { OwnerScopeService, type OwnerScope } from '../../common/scope/owner-scope.service';
 import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/cursor';
-import { parseDateOnly, startOfDayUtc } from '../../common/utils/date';
+import { parseDateOnly } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
-import { deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
+import { deleteAccessoriesAndAdjustLedger, deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
 import { TransactionVo } from '../transactions/dto/transaction.vo';
 import { CostService, emptyCostContext, type ItemCostContext } from './cost.service';
 import type {
@@ -232,41 +232,20 @@ export class ItemsService {
     return null;
   }
 
-  async addAccessory(userId: string, itemId: string, dto: CreateAccessoryDto): Promise<AccessoryVo> {
-    const { row, scope } = await this.requireItem(userId, itemId);
-    const batch = await this.prepareBatch(scope, dto, startOfDayUtc(new Date()));
-    const actorId = this.requireId(userId);
-
-    const accessory = await this.prisma.$transaction((tx) => this.writeBatch(tx, row.id, batch, actorId));
-    this.audit.record('items.accessory.added', {
-      userId,
-      itemId: bytesToUuid(row.id),
-      accessoryId: bytesToUuid(accessory.id),
-      owner: scope.key,
-      totalQty: batch.totalQty,
-    });
-    return AccessoryVo.from(accessory);
-  }
-
-  /** 撤销批次库存：不删批次，写入数量和来源流水都可追溯。 */
+  /** 删除批次：移除使用记录与流水分摊，共享流水实时扣减对应金额。 */
   async removeAccessory(userId: string, id: string, dto: InventoryRevertDto): Promise<null> {
     const { accessory, item, scope } = await this.requireAccessory(userId, id);
-    const remaining = accessory.totalQty - accessory.usedQty - accessory.revertedQty;
-    const qty = dto.qty ?? remaining;
-    if (qty > remaining) {
-      throw new ConflictException({ code: 'ACCESSORY_REVERT_EXCEEDED', message: `该批次仅剩 ${remaining} 个可撤销` });
-    }
-    await this.prisma.$transaction(async (tx) => {
-      await tx.itemAccessory.update({ where: { id: accessory.id }, data: { revertedQty: { increment: qty } } });
-      await tx.inventoryRevert.create({
-        data: { id: newId(), itemId: item.id, accessoryId: accessory.id, sourceTransactionId: accessory.transactionId, kind: dto.kind ?? 'dispose', qty, reason: dto.reason.trim(), createdBy: this.requireId(userId) },
-      });
-    });
-    this.audit.record('items.accessory.reverted', {
+    const result = await this.prisma.$transaction((tx) =>
+      deleteAccessoriesAndAdjustLedger(tx, [accessory.id], new Date(), this.requireId(userId), dto.reason.trim()),
+    );
+    this.audit.record('items.accessory.deleted', {
       userId,
       itemId: bytesToUuid(item.id),
       accessoryId: bytesToUuid(accessory.id),
       owner: scope.key,
+      removedAllocations: result.allocationCount,
+      removedUsages: result.usageCount,
+      adjustedTransactions: result.adjustedTransactionCount,
     });
     return null;
   }

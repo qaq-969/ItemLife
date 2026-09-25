@@ -17,7 +17,7 @@ import { OwnerScopeService, type OwnerScope } from '../../common/scope/owner-sco
 import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/cursor';
 import { addDaysUtc, parseDateOnly, startOfDayUtc, toDateOnlyString } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
-import { deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
+import { deleteAccessoriesAndAdjustLedger, deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
 import type {
   CreateTransactionDto,
   InlineAccessoryDto,
@@ -270,28 +270,13 @@ export class TransactionsService {
           select: { accessoryId: true },
         });
         const accessoryIds = accessoryLinks.flatMap((link) => (link.accessoryId ? [link.accessoryId] : []));
-        const accessories = accessoryIds.length
-          ? await tx.itemAccessory.findMany({
-              where: { id: { in: accessoryIds }, deletedAt: null },
-              select: { id: true, itemId: true, totalQty: true, usedQty: true, revertedQty: true },
-            })
-          : [];
-        for (const accessory of accessories) {
-          const remaining = Math.max(0, accessory.totalQty - accessory.usedQty - accessory.revertedQty);
-          await tx.itemAccessory.update({ where: { id: accessory.id }, data: { deletedAt } });
-          await tx.inventoryRevert.create({
-            data: {
-              id: newId(),
-              itemId: accessory.itemId,
-              accessoryId: accessory.id,
-              sourceTransactionId: row.id,
-              kind: 'dispose',
-              qty: remaining,
-              reason: '删除购买流水时同步撤销配件',
-              createdBy: actorId,
-            },
-          });
-        }
+        await deleteAccessoriesAndAdjustLedger(
+          tx,
+          accessoryIds,
+          deletedAt,
+          actorId,
+          '删除购买流水时同步删除配件批次',
+        );
 
         await tx.transaction.update({ where: { id: row.id }, data: { deletedAt } });
       });

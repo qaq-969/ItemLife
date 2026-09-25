@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
-import { formatMoney, toMinor, type ItemDetailDto, type ItemStatus, type TransactionDto } from '@itemlife/shared';
+import { formatMoney, type ItemDetailDto, type ItemStatus, type TransactionDto } from '@itemlife/shared';
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
-import AppModal from '@/components/AppModal.vue';
 import { init, use, type ECharts } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
@@ -30,15 +29,6 @@ const message = ref<string | null>(null);
 
 /** 每个批次行独立的消耗数量，默认 1 */
 const qty = reactive<Record<string, string>>({});
-
-const batchOpen = ref(false);
-const batchForm = reactive({
-  name: '',
-  unitYuan: '',
-  totalQty: '1',
-  usedQty: '0',
-  purchasedAt: new Date().toISOString().slice(0, 10),
-});
 
 const chartEl = ref<HTMLDivElement | null>(null);
 let chart: ECharts | null = null;
@@ -175,59 +165,11 @@ function restore(accessoryId: string): void {
 }
 
 function removeAccessory(accessoryId: string, name: string): void {
-  const reason = window.prompt(`撤销配件「${name}」会保留采购流水。请填写原因：`);
+  const reason = window.prompt(
+    `删除配件批次「${name}」会清除它的使用和恢复记录，并从关联流水中移除该批次金额；共享流水会保留并实时扣减金额。请填写原因：`,
+  );
   if (!reason?.trim()) return;
-  void guard(() => itemsApi.removeAccessory(accessoryId, { reason: reason.trim() }), '已生成配件撤销记录');
-}
-
-function submitBatch(): void {
-  const item = detail.value;
-  if (!item) return;
-  errorText.value = null;
-
-  const name = batchForm.name.trim();
-  if (!name) {
-    errorText.value = '请填写配件名称';
-    return;
-  }
-  let unitPriceMinor: number;
-  try {
-    unitPriceMinor = toMinor(batchForm.unitYuan || '0');
-  } catch {
-    errorText.value = '单价格式不正确（最多两位小数）';
-    return;
-  }
-  const totalQty = Number(batchForm.totalQty);
-  const usedQty = Number(batchForm.usedQty || '0');
-  if (!Number.isInteger(totalQty) || totalQty <= 0) {
-    errorText.value = '数量需为正整数';
-    return;
-  }
-  if (!Number.isInteger(usedQty) || usedQty < 0 || usedQty > totalQty) {
-    errorText.value = `已用数量需在 0 ~ ${totalQty} 之间`;
-    return;
-  }
-
-  batchOpen.value = false;
-  void guard(
-    () =>
-      itemsApi.addAccessory(item.id, {
-        name,
-        unitPriceMinor,
-        totalQty,
-        usedQty,
-        purchasedAt: batchForm.purchasedAt,
-      }),
-    '配件批次已入库',
-  ).then(() => {
-    Object.assign(batchForm, {
-      name: '',
-      unitYuan: '',
-      totalQty: '1',
-      usedQty: '0',
-      purchasedAt: new Date().toISOString().slice(0, 10),
-    });
-  });
+  void guard(() => itemsApi.removeAccessory(accessoryId, { reason: reason.trim() }), '配件批次及关联记录已删除');
 }
 
 function removeItem(): void {
@@ -377,14 +319,11 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="card p-5">
-        <div class="flex items-center justify-between gap-3">
+        <div>
           <div>
             <h2 class="text-sm font-semibold">配件库存</h2>
-            <p class="mt-1 text-xs text-ink-3">同一物品可分批入库，成本按各批次单价分别计算。</p>
+            <p class="mt-1 text-xs text-ink-3">批次只能从「记一笔」录入；这里仅管理使用、恢复和删除。</p>
           </div>
-          <button type="button" class="btn btn-ghost min-h-9 px-3 text-xs" @click="batchOpen = true">
-            添加批次
-          </button>
         </div>
 
         <p v-if="detail.accessories.length === 0" class="mt-3 text-sm text-ink-3">还没有配件批次。</p>
@@ -505,37 +444,5 @@ onBeforeUnmount(() => {
       </section>
     </template>
 
-    <AppModal :open="batchOpen" title="添加配件批次" @close="batchOpen = false">
-      <form class="space-y-4" @submit.prevent="submitBatch">
-        <div>
-          <label class="label" for="batch-name">配件名称</label>
-          <input id="batch-name" v-model="batchForm.name" class="field" maxlength="60" placeholder="替换刷头" />
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="label" for="batch-price">单价（元）</label>
-            <input id="batch-price" v-model="batchForm.unitYuan" class="field tabular-nums" inputmode="decimal" placeholder="20.00" />
-          </div>
-          <div>
-            <label class="label" for="batch-date">购入日期</label>
-            <input id="batch-date" v-model="batchForm.purchasedAt" type="date" class="field" />
-          </div>
-          <div>
-            <label class="label" for="batch-total">数量</label>
-            <input id="batch-total" v-model="batchForm.totalQty" class="field tabular-nums" inputmode="numeric" />
-          </div>
-          <div>
-            <label class="label" for="batch-used">已用数量</label>
-            <input id="batch-used" v-model="batchForm.usedQty" class="field tabular-nums" inputmode="numeric" />
-          </div>
-        </div>
-        <p class="text-xs text-ink-3">已用数量 &gt; 0 时会补一条使用审计，成本指标随即抬升。</p>
-
-        <div class="flex gap-3">
-          <button type="button" class="btn btn-ghost flex-1" @click="batchOpen = false">取消</button>
-          <button type="submit" class="btn btn-primary flex-1" :disabled="busy">入库</button>
-        </div>
-      </form>
-    </AppModal>
   </section>
 </template>
