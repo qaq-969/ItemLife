@@ -1,17 +1,32 @@
 <script setup lang="ts">
+import { ref } from 'vue';
+
 defineProps<{ open: boolean; title: string; wide?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
+const pressedBackdrop = ref(false);
+
+function onPointerDown(event: PointerEvent): void {
+  pressedBackdrop.value = event.target === event.currentTarget;
+}
+
+function onPointerUp(event: PointerEvent): void {
+  const releasedOnBackdrop = event.target === event.currentTarget;
+  if (pressedBackdrop.value && releasedOnBackdrop) emit('close');
+  pressedBackdrop.value = false;
+}
 </script>
 
 <template>
   <Teleport to="body">
     <div
       v-if="open"
-      class="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-      @click.self="emit('close')"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-3 backdrop-blur-sm sm:p-4"
+      @pointerdown="onPointerDown"
+      @pointerup="onPointerUp"
+      @pointercancel="pressedBackdrop = false"
     >
       <div
-        class="max-h-[88dvh] w-full overflow-y-auto rounded-t-2xl bg-white p-5 sm:rounded-2xl"
+        class="max-h-[88dvh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
         :class="wide ? 'max-w-4xl' : 'max-w-md'"
         role="dialog"
         aria-modal="true"

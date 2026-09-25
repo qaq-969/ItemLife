@@ -17,6 +17,7 @@ import { OwnerScopeService, type OwnerScope } from '../../common/scope/owner-sco
 import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/cursor';
 import { addDaysUtc, parseDateOnly, startOfDayUtc, toDateOnlyString } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
+import { deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
 import type {
   CreateTransactionDto,
   InlineAccessoryDto,
@@ -234,10 +235,13 @@ export class TransactionsService {
     return this.findById(scope, row.id);
   }
 
-  /** 软删除：删整笔，转账连带删除成对的另一条腿；余额随之下一次派生自动回滚。 */
+  /** 删除流水：同步删除由本流水新建的物品，并撤销给既有物品追加的配件库存。 */
   async remove(userId: string, id: string): Promise<null> {
     const { row, scope } = await this.requireTransaction(userId, id);
     const deletedAt = new Date();
+    const actorId = this.requireId(userId);
+    let deletedItemCount = 0;
+    let adjustedTransactionCount = 0;
 
     if (row.transferGroupId) {
       await this.prisma.transaction.updateMany({
@@ -245,7 +249,52 @@ export class TransactionsService {
         data: { deletedAt },
       });
     } else {
-      await this.prisma.transaction.update({ where: { id: row.id }, data: { deletedAt } });
+      await this.prisma.$transaction(async (tx) => {
+        const createdItems = await tx.item.findMany({
+          where: { purchaseTransactionId: row.id, deletedAt: null },
+          select: { id: true },
+        });
+        const itemResult = await deleteItemsAndAdjustLedger(
+          tx,
+          createdItems.map((item) => item.id),
+          deletedAt,
+          actorId,
+          '删除购买流水时同步删除物品',
+        );
+        deletedItemCount = itemResult.itemCount;
+        adjustedTransactionCount = itemResult.adjustedTransactionCount;
+
+        // 本流水给既有物品追加的配件不随物品删除，但其采购事实已删除，因此同步撤销该批次。
+        const accessoryLinks = await tx.transactionItem.findMany({
+          where: { transactionId: row.id, role: 'accessory', accessoryId: { not: null } },
+          select: { accessoryId: true },
+        });
+        const accessoryIds = accessoryLinks.flatMap((link) => (link.accessoryId ? [link.accessoryId] : []));
+        const accessories = accessoryIds.length
+          ? await tx.itemAccessory.findMany({
+              where: { id: { in: accessoryIds }, deletedAt: null },
+              select: { id: true, itemId: true, totalQty: true, usedQty: true, revertedQty: true },
+            })
+          : [];
+        for (const accessory of accessories) {
+          const remaining = Math.max(0, accessory.totalQty - accessory.usedQty - accessory.revertedQty);
+          await tx.itemAccessory.update({ where: { id: accessory.id }, data: { deletedAt } });
+          await tx.inventoryRevert.create({
+            data: {
+              id: newId(),
+              itemId: accessory.itemId,
+              accessoryId: accessory.id,
+              sourceTransactionId: row.id,
+              kind: 'dispose',
+              qty: remaining,
+              reason: '删除购买流水时同步撤销配件',
+              createdBy: actorId,
+            },
+          });
+        }
+
+        await tx.transaction.update({ where: { id: row.id }, data: { deletedAt } });
+      });
     }
 
     this.audit.record('ledger.transaction.deleted', {
@@ -253,6 +302,8 @@ export class TransactionsService {
       transactionId: id,
       owner: scope.key,
       transfer: Boolean(row.transferGroupId),
+      deletedItemCount,
+      adjustedTransactionCount,
     });
     return null;
   }

@@ -7,6 +7,7 @@ import { OwnerScopeService, type OwnerScope } from '../../common/scope/owner-sco
 import { decodeCursor, encodeCursor, parseLimit } from '../../common/utils/cursor';
 import { parseDateOnly, startOfDayUtc } from '../../common/utils/date';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
+import { deleteItemsAndAdjustLedger } from '../../common/utils/item-ledger-delete';
 import { TransactionVo } from '../transactions/dto/transaction.vo';
 import { CostService, emptyCostContext, type ItemCostContext } from './cost.service';
 import type {
@@ -212,17 +213,22 @@ export class ItemsService {
     return this.voOf(scope, updated);
   }
 
-  /** 撤销物品库存：历史流水不改写，新增可追溯凭据后才软删除。 */
+  /** 删除物品：移除各流水中的对应分摊并实时扣减金额，共享流水的其他物品不受影响。 */
   async remove(userId: string, id: string, dto: InventoryRevertDto): Promise<null> {
     const { row, scope } = await this.requireItem(userId, id);
     const actorId = this.requireId(userId);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.inventoryRevert.create({
-        data: { id: newId(), itemId: row.id, sourceTransactionId: row.purchaseTransactionId, kind: dto.kind ?? 'dispose', reason: dto.reason.trim(), createdBy: actorId },
-      });
-      await tx.item.update({ where: { id: row.id }, data: { deletedAt: new Date(), status: 'retired' } });
+    const deletedAt = new Date();
+    const result = await this.prisma.$transaction((tx) =>
+      deleteItemsAndAdjustLedger(tx, [row.id], deletedAt, actorId, dto.reason.trim()),
+    );
+    this.audit.record('items.item.reverted', {
+      userId,
+      itemId: bytesToUuid(row.id),
+      owner: scope.key,
+      kind: dto.kind ?? 'dispose',
+      removedAllocations: result.allocationCount,
+      adjustedTransactions: result.adjustedTransactionCount,
     });
-    this.audit.record('items.item.reverted', { userId, itemId: bytesToUuid(row.id), owner: scope.key, kind: dto.kind ?? 'dispose' });
     return null;
   }
 
@@ -551,7 +557,7 @@ export class ItemsService {
     id: string,
   ): Promise<{ accessory: ItemAccessory; item: Item; scope: OwnerScope }> {
     const bytes = toIdBytes(id);
-    const accessory = bytes ? await this.prisma.itemAccessory.findFirst({ where: { id: bytes } }) : null;
+    const accessory = bytes ? await this.prisma.itemAccessory.findFirst({ where: { id: bytes, deletedAt: null } }) : null;
     if (!accessory) throw accessoryNotFound();
 
     const item = await this.prisma.item.findFirst({ where: { id: accessory.itemId, deletedAt: null } });

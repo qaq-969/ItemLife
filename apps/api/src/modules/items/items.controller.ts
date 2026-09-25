@@ -50,7 +50,7 @@ export class ItemsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '撤销物品库存：保留关联流水，并生成可追溯撤销记录' })
+  @ApiOperation({ summary: '删除物品：同步移除流水分摊并扣减流水金额，生成可追溯撤销记录' })
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: InventoryRevertDto): Promise<null> {
     return this.items.remove(user.id, id, dto);
   }

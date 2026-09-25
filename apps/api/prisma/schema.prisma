@@ -353,6 +353,7 @@ model ItemAccessory {
   transactionId  Bytes?   @map("transaction_id") @db.Binary(16)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
 
   item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
   transaction      Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
@@ -361,6 +362,7 @@ model ItemAccessory {
   reverts          InventoryRevert[]
 
   @@index([itemId])
+  @@index([itemId, deletedAt])
   @@map("item_accessories")
 }
 

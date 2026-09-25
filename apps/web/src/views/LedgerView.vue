@@ -282,7 +282,11 @@ async function submitEdit(): Promise<void> {
 }
 
 async function remove(row: TransactionDto): Promise<void> {
-  const transferHint = row.transferGroupId ? '这是转账的一条腿，删除会连带删除另一条腿。' : '删除后账户余额会自动回滚。';
+  const transferHint = row.transferGroupId
+    ? '这是转账的一条腿，删除会连带删除另一条腿。'
+    : row.items.length > 0
+      ? '本流水新建的物品会同步删除；给已有物品追加的配件也会撤销。若这些物品还出现在其他共享流水中，对应明细会移除且金额实时扣减。'
+      : '删除后账户余额会自动回滚。';
   if (!window.confirm(`删除这笔${TYPE_LABELS[row.type] ?? ''}流水？${transferHint}`)) return;
   busy.value = true;
   try {

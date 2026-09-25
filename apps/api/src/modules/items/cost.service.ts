@@ -138,7 +138,7 @@ export class CostService {
     if (itemIds.length === 0) return grouped;
 
     const rows = await this.prisma.itemAccessory.findMany({
-      where: { itemId: { in: itemIds } },
+      where: { itemId: { in: itemIds }, deletedAt: null },
       orderBy: [{ purchasedAt: 'asc' }, { id: 'asc' }],
     });
     for (const row of rows) {

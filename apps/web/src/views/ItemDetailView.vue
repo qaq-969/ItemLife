@@ -233,7 +233,9 @@ function submitBatch(): void {
 function removeItem(): void {
   const item = detail.value;
   if (!item) return;
-  const reason = window.prompt(`撤销物品「${item.name}」会保留历史流水。请填写原因：`);
+  const reason = window.prompt(
+    `删除物品「${item.name}」会同步移除 ${item.transactions.length} 笔关联流水中的对应物品、配件和费用；共享流水会自动扣减金额，减为 0 时整笔删除。请填写原因：`,
+  );
   if (!reason?.trim()) return;
   void (async () => {
     try {

@@ -145,6 +145,7 @@ export function createInMemoryPrisma(): AnyDb {
         revertedQty: 0,
         firstUnitExtraMinor: 0n,
         transactionId: null,
+        deletedAt: null,
         purchasedAt: now(),
         createdAt: now(),
         updatedAt: now(),

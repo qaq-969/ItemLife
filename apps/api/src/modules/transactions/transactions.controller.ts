@@ -58,7 +58,7 @@ export class TransactionsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '删除流水（软删）：转账连带删除成对的另一条腿，余额随派生计算回滚' })
+  @ApiOperation({ summary: '删除流水：同步删除本流水新建的物品及追加配件，其他共享流水实时扣减对应金额' })
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string): Promise<null> {
     return this.transactions.remove(user.id, id);
   }

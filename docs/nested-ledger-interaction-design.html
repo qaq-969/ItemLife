@@ -21,12 +21,12 @@
 </style>
 </head>
 <body>
-<header><div><p class="eyebrow">交互设计报告 · 2026-09-25</p><h1>多级子账单与物品树</h1><p class="sub">每一次付款只是一条根流水；商品、物品、配件与附件都作为可展开的归属节点。删除不会抹账，而是生成可追溯的 revert。</p></div></header>
+<header><div><p class="eyebrow">交互设计报告 · 2026-09-25</p><h1>多级子账单与物品树</h1><p class="sub">每一次付款只是一条根流水；商品、物品、配件与附件都作为可展开的归属节点。删除按金额归属联动，并生成可追溯的 revert。</p></div></header>
 <main class="wrap">
   <section>
     <h2>设计结论</h2>
     <p class="lead">“记一笔”是唯一创建入口；物品页只负责查询、使用、维护结构和发起调整。子账单不是第二笔钱，而是根流水内部的金额归属树。这样账户余额只由根流水变动一次，物品成本却能精确追溯到任意层附件。</p>
-    <div class="grid g3"><div class="cell"><b>一笔钱，一条根流水</b><span class="small">根节点记录账户、分类、时间、付款金额；只有它影响现金余额。</span></div><div class="cell"><b>任意层子账单</b><span class="small">一件物品可有附件，附件也可再有附件；每个节点都可继续拆分金额与数量。</span></div><div class="cell"><b>删改留痕</b><span class="small">删除库存生成 revert 链；原始采购、使用和调整记录仍可在流水中查看。</span></div></div>
+    <div class="grid g3"><div class="cell"><b>一笔钱，一条根流水</b><span class="small">根节点记录账户、分类、时间、付款金额；只有它影响现金余额。</span></div><div class="cell"><b>任意层子账单</b><span class="small">一件物品可有附件，附件也可再有附件；每个节点都可继续拆分金额与数量。</span></div><div class="cell"><b>删改留痕</b><span class="small">删除按归属行同步物品与流水；共享流水只扣减受影响金额，同时保留审计与 revert 记录。</span></div></div>
   </section>
 
   <section>
@@ -66,10 +66,10 @@
   </section>
 
   <section>
-    <h2>删除库存：revert，而不是删除历史</h2>
-    <p class="lead">“删除”统一改名为“创建 revert 调整”。它会生成一条反向引用原节点的记录，并在流水、物品详情、库存记录中都可点击查看。原始记录永远保留。</p>
+    <h2>删除联动：按金额归属处理并保留审计</h2>
+    <p class="lead">用户明确删除物品或流水时，系统按归属行联动，而不是删除整个关联网络。删除物品会移除它在所有流水中的本体、配件和附加费用，并扣减共享流水金额；删除流水会删除由它创建的物品，并撤销它追加到既有物品的配件。共享流水金额减至 0 时才删除整笔，操作同时生成审计与 revert 记录。</p>
     <div class="grid g2"><div class="cell"><b>无现金退款：报废 / 录入错误</b><p class="small">新建内部库存调整：减少该批次剩余数量与库存价值，不改变账户余额；根流水时间线显示“已由 revert #R-002 调整”。</p></div><div class="cell"><b>有现金退款：退货 / 商家返款</b><p class="small">新建一笔收入或原支出的冲销流水，选择收款账户并引用原采购；账户余额和物品成本同时按规则回退。</p></div></div>
-    <div class="warning"><b>不可直接删除的场景：</b>节点已有下级、配件已被消耗、已存在退款或被其他调整引用时，界面只提供“创建 revert”或“先处理子节点”，不提供物理删除。</div>
+    <div class="warning"><b>跨流水示例：</b>流水 A 购买电动牙刷，流水 B 同时购买剃须刀和牙刷刷头。删除流水 A 时，电动牙刷及流水 B 中依附于它的刷头归属一并删除；流水 B 保留剃须刀，并实时扣减刷头金额。退款、退货仍应走退款或冲销流程。</div>
   </section>
 
   <section>
