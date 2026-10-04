@@ -143,15 +143,15 @@ onMounted(() => { void domain.load().catch(() => undefined); });
           v-for="item in bottomNav"
           :key="item.name"
           :to="{ name: item.name }"
-          class="flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium"
+          class="group flex min-h-14 flex-col items-center justify-center gap-0.5 text-[11px] font-medium"
           :class="isActive(item.name) ? 'text-brand' : 'text-ink-3'"
         >
           <span
             v-if="item.name === 'transaction-new'"
-            class="grid size-9 place-items-center rounded-full bg-brand text-white shadow-lg shadow-brand/30"
+            class="grid size-9 place-items-center rounded-full bg-brand text-white shadow-lg shadow-brand/30 transition-[transform,box-shadow] duration-150 ease-out group-active:scale-90 group-active:shadow-sm motion-reduce:transition-none motion-reduce:group-active:scale-100"
           >
             <svg
-              class="size-5"
+              class="size-5 transition-transform duration-150 ease-out group-active:rotate-90 motion-reduce:transition-none motion-reduce:group-active:rotate-0"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
