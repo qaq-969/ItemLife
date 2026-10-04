@@ -8,6 +8,9 @@ import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/
 import { MFA_TICKET_TTL_SECONDS } from './auth.constants';
 import type { DeviceContext } from './device.decorator';
 
+/** 多标签页或 Safari 页面恢复可能并发刷新；短窗口内视为竞态，不吊销已签发的新会话。 */
+export const REFRESH_TOKEN_REUSE_GRACE_MS = 30_000;
+
 export interface AccessTokenPayload {
   /** 用户 ID（UUID） */
   sub: string;
@@ -132,12 +135,17 @@ export class TokenService {
     }
 
     if (record.revokedAt) {
-      const { found, revoked } = await this.revokeDescendants(record.id);
-      // 无派生令牌 = 该会话是被主动吊销的（登出 / 全端下线），客户端拿着旧 Cookie 属正常竞态，
-      // 按普通失效处理；有派生令牌才是「旋转后被重放」，判定为令牌泄露。
-      if (found === 0) {
+      const rotatedChild = await this.prisma.refreshToken.findFirst({
+        where: { rotatedFrom: record.id },
+        select: { id: true },
+      });
+      if (!rotatedChild) {
         throw new UnauthorizedException({ code: 'REFRESH_TOKEN_INVALID', message: '登录状态已失效，请重新登录' });
       }
+      if (Date.now() - record.revokedAt.getTime() <= REFRESH_TOKEN_REUSE_GRACE_MS) {
+        throw staleRefreshToken();
+      }
+      const { found, revoked } = await this.revokeDescendants(record.id);
       this.audit.record('auth.token.reuse_detected', {
         userId: bytesToUuid(record.userId),
         tokenId: bytesToUuid(record.id),
@@ -163,9 +171,14 @@ export class TokenService {
     const id = newId();
     const expiresAt = new Date(Date.now() + this.refreshTtlMs);
 
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.update({ where: { id: record.id }, data: { revokedAt: new Date() } }),
-      this.prisma.refreshToken.create({
+    const revokedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.refreshToken.updateMany({
+        where: { id: record.id, revokedAt: null },
+        data: { revokedAt },
+      });
+      if (claimed.count === 0) throw staleRefreshToken();
+      await tx.refreshToken.create({
         data: {
           id,
           userId: record.userId,
@@ -176,8 +189,8 @@ export class TokenService {
           expiresAt,
           rotatedFrom: record.id,
         },
-      }),
-    ]);
+      });
+    });
 
     return { id, token, expiresAt, userId: record.userId };
   }
@@ -235,6 +248,10 @@ export class TokenService {
 
     return { found, revoked };
   }
+}
+
+function staleRefreshToken(): UnauthorizedException {
+  return new UnauthorizedException({ code: 'REFRESH_TOKEN_STALE', message: '登录状态正在同步，请重试' });
 }
 
 /** 从 UA 中提取一个便于识别的设备名（不引入 UA 解析依赖） */

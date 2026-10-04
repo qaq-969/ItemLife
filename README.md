@@ -56,7 +56,7 @@ pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/
 不依赖 MySQL / Redis 也能验证后端业务链路（内存替身 + 真实 HTTP 全链路断言）：
 
 ```bash
-pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
+pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌轮换并发保护等 39 项
 pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
 pnpm --filter @itemlife/api smoke:items    # 物品：成本 / 配件 / 流水联动删除 / 多级归属 等 82 项
 pnpm --filter @itemlife/api smoke:m4m5     # 家庭：三级权限/删改/隔离；看板：收支/总资产趋势/占比 等 46 项

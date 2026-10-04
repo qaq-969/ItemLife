@@ -6,6 +6,7 @@
  * 运行：pnpm --filter @itemlife/api smoke:auth
  */
 import 'reflect-metadata';
+import { createHash } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -14,6 +15,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.setup';
 import { PrismaService } from '../src/common/prisma/prisma.service';
 import { REDIS_CLIENT } from '../src/common/redis/redis.module';
+import { REFRESH_TOKEN_REUSE_GRACE_MS } from '../src/modules/auth/token.service';
 import { createInMemoryPrisma, createInMemoryRedis } from './support/in-memory';
 
 const GLOBAL_TIMEOUT_MS = 240_000;
@@ -39,9 +41,10 @@ async function main(): Promise<void> {
   // 以便用 X-Forwarded-For 模拟不同客户端，避免冒烟请求相互触发限流。
   process.env.TRUST_PROXY = '1';
 
+  const prisma = createInMemoryPrisma();
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(PrismaService)
-    .useValue(createInMemoryPrisma())
+    .useValue(prisma)
     .overrideProvider(REDIS_CLIENT)
     .useValue(createInMemoryRedis())
     .compile();
@@ -192,9 +195,19 @@ async function main(): Promise<void> {
   check('刷新后新令牌可用', meAfterRefresh.status === 200, JSON.stringify(meAfterRefresh.body));
 
   const reused = await request('POST', '/auth/token/refresh', { cookie: cookie2 });
-  check('旧刷新令牌复用触发盗用响应 REFRESH_TOKEN_REUSED', reused.status === 401 && reused.body?.code === 'REFRESH_TOKEN_REUSED', JSON.stringify(reused.body));
+  check('并发刷新宽限期内旧令牌返回可重试状态', reused.status === 401 && reused.body?.code === 'REFRESH_TOKEN_STALE', JSON.stringify(reused.body));
 
-  const afterTheft = await request('POST', '/auth/token/refresh', { cookie: cookie3 });
+  const afterRace = await request('POST', '/auth/token/refresh', { cookie: cookie3 });
+  const cookie4 = refreshCookie(afterRace);
+  check('并发刷新不会吊销已经签发的新会话', afterRace.status === 200 && cookie4.length > 0, JSON.stringify(afterRace.body));
+
+  const oldHash = createHash('sha256').update(cookie2.split('=')[1] ?? '').digest('hex');
+  const oldRecord = prisma.$tables.refreshToken.rows.find((row: any) => row.tokenHash === oldHash);
+  if (oldRecord) oldRecord.revokedAt = new Date(Date.now() - REFRESH_TOKEN_REUSE_GRACE_MS - 1_000);
+  const replayedLater = await request('POST', '/auth/token/refresh', { cookie: cookie2 });
+  check('宽限期后旧刷新令牌复用仍触发盗用响应', replayedLater.status === 401 && replayedLater.body?.code === 'REFRESH_TOKEN_REUSED', JSON.stringify(replayedLater.body));
+
+  const afterTheft = await request('POST', '/auth/token/refresh', { cookie: cookie4 });
   check('整族吊销后派生令牌同样失效', afterTheft.status === 401, JSON.stringify(afterTheft.body));
 
   console.log('\n[8] 登录失败锁定');

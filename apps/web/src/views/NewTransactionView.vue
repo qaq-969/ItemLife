@@ -5,6 +5,7 @@ import { formatMoney, toMinor, toYuan, type ItemDto } from '@itemlife/shared';
 import { transactionsApi } from '@/api/ledger';
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
+import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import AllocationTreeNode from '@/components/AllocationTreeNode.vue';
 import { useLedgerStore } from '@/stores/ledger';
@@ -96,7 +97,7 @@ onMounted(async () => { await ledger.refresh().catch(() => undefined); form.acco
             <div><label class="label">{{ form.entry === 'transfer' ? '转出账户' : '账户' }}</label><AppSelect v-model="form.accountId" :options="accountOptions" /></div>
             <div v-if="form.entry === 'transfer'"><label class="label">转入账户</label><AppSelect v-model="form.toAccountId" :options="transferOptions" /></div>
             <div v-else><label class="label">分类</label><AppSelect v-model="form.categoryId" :options="categoryOptions" /></div>
-            <div><label class="label">发生时间</label><input v-model="form.occurredAt" type="datetime-local" class="field" /></div>
+            <div><label class="label">发生时间</label><AppDateTimePicker v-model="form.occurredAt" mode="datetime" aria-label="发生时间" /></div>
             <div><label class="label">备注</label><input v-model="form.note" class="field" maxlength="200" /></div>
           </div>
 

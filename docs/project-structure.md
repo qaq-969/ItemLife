@@ -89,7 +89,7 @@ apps/web/
 │   │   ├── DashboardView.vue  FamilyView.vue  SiteAdminView.vue
 │   │   ├── MeView.vue  SecurityView.vue  SettingsView.vue
 │   │   └── NotFoundView.vue
-│   ├── components/           # 可复用小组件（AuthCard / PagePlaceholder / AppModal）
+│   ├── components/           # 可复用小组件（AppSelect / AppDateTimePicker / AppModal 等）
 │   ├── utils/                # 无状态辅助函数（navigation.ts）
 │   └── assets/styles/main.css
 └── tsconfig.json
@@ -99,7 +99,7 @@ apps/web/
 
 - **页面放 `views/`，可复用片段放 `components/`**；只在单个页面用到的（哪怕是个大块）就留在该 view 里，不提前抽组件。
 - **网络请求一律走 `src/api/`**：`http.ts` 负责 401 续期与错误归一化，`unwrap()` 把 `{code,message,data}` 包络拆开，让页面直接拿到 `data`。
-- **令牌不落 localStorage**：access token 只存在 Pinia 内存（`stores/auth.ts`），刷新令牌在 HttpOnly Cookie 里，页面刷新后用 `bootstrap()` 静默续期。
+- **令牌不落 localStorage**：access token 只存在 Pinia 内存（`stores/auth.ts`），刷新令牌在 HttpOnly Cookie 里，页面刷新后用 `bootstrap()` 静默续期；服务端对合法并发轮换提供 30 秒宽限，前端自动重试一次。
 - 新增一个页面：`views/` 建文件 → `router/index.ts` 注册路由（受保护页放进 `AppShell` 的 children）→ 需要后端数据就在 `api/` 加一个方法。
 
 ## 4. apps/api（后端）
@@ -272,7 +272,7 @@ modules/auth/
 | --- | --- |
 | `pnpm typecheck` | 三个包一起做类型检查 |
 | `pnpm build` | shared → web → api 全量构建 |
-| `pnpm --filter @itemlife/api smoke:auth` | **认证链路离线冒烟**：内存假 DB/Redis 启动真实 Nest 应用，跑完注册 → 登录 → MFA → 恢复码 → 令牌旋转/盗用 → 锁定 → 登出共 37 项断言 |
+| `pnpm --filter @itemlife/api smoke:auth` | **认证链路离线冒烟**：内存假 DB/Redis 启动真实 Nest 应用，跑完注册 → 登录 → MFA → 恢复码 → 令牌轮换并发保护/盗用 → 锁定 → 登出共 39 项断言 |
 | `pnpm --filter @itemlife/api smoke:ledger` | **记账核心离线冒烟**：预置分类 → 分类增删改排序 → 账户与派生余额 → 记一笔与分摊校验 → 转账联动 → 改删回滚 → 列表筛选分页小计 → 幂等键 → 结息幂等 → 数据域隔离，共 66 项断言 |
 | `pnpm --filter @itemlife/api smoke:items` | **物品与配件离线冒烟**：牙刷成本验收 → 消耗 / 撤销与审计 → 批次联动删除 → 看板 → 多级流水归属 → 金额余数分配 → 跨页面删除同步 → 数据域隔离，共 82 项断言 |
 | `pnpm --filter @itemlife/api smoke:m4m5` | **家庭与综合看板离线冒烟**：创建 / 改名 / 三级权限 / 邀请 / 成员管理 / 事务删除 / 数据隔离 → 区间汇总 / 收支与总资产趋势 / 分类占比 / 物品投入，共 46 项断言 |
@@ -302,7 +302,7 @@ modules/auth/
   恢复码 / 刷新令牌轮换与盗用检测 / 失败锁定 / 登出全链路，前端登录、注册、两步验证、安全设置（MFA 绑定与恢复码展示）四个页面。
 - 已完成（后端）：**M2 记账核心**——数据域（个人 / 家庭）、分类树与预置分类、账户与派生余额、计息配置、
   记一笔（收 / 支 / 转账 + 多物品分摊 + 幂等键 + 游标分页 + 区间小计）、利息自动结息与手动结息。
-  离线冒烟 `smoke:ledger` 66 项、`smoke:auth` 37 项全绿；`pnpm typecheck` 无错误。
+  离线冒烟 `smoke:ledger` 66 项、`smoke:auth` 39 项全绿；`pnpm typecheck` 无错误。
 - 已完成（前端）：**M2 记账核心**——请求层 `api/ledger.ts` 与 Pinia `stores/ledger.ts`（账户 / 分类 / 汇总缓存与单飞刷新）、
   通用底部弹层 `components/AppModal.vue`、账户管理页（余额汇总 + 计息配置 + 手动结息预览）、
   分类管理页（两级树 + 增删改 + 上移/下移排序 + 停用过滤）、记一笔（收 / 支 / 转账三态）、

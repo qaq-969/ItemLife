@@ -63,10 +63,8 @@ let refreshInFlight: Promise<string | null> | null = null;
 
 /** 401 时静默续期一次（并发请求共用同一个刷新过程）。 */
 function refreshAccessToken(): Promise<string | null> {
-  refreshInFlight ??= axios
-    .post<ApiEnvelope<{ accessToken: string }>>(`${API_BASE_URL}/auth/token/refresh`, null, {
-      withCredentials: true,
-    })
+  refreshInFlight ??= http
+    .post<ApiEnvelope<{ accessToken: string }>>('/auth/token/refresh', null)
     .then((response) => {
       const token = response.data.data.accessToken;
       hooks.setToken(token);
@@ -87,6 +85,12 @@ http.interceptors.response.use(
     const status = error.response?.status;
     const url = config?.url ?? '';
     const skipRefresh = NO_REFRESH_PATHS.some((path) => url.includes(path));
+
+    if (status === 401 && error.response?.data?.code === 'REFRESH_TOKEN_STALE' && config && !config._retried) {
+      config._retried = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+      return http.request(config);
+    }
 
     if (status === 401 && config && !config._retried && !skipRefresh) {
       config._retried = true;

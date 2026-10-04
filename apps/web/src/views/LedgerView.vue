@@ -6,6 +6,7 @@ import { transactionsApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
 import { useDomainStore } from '@/stores/domain';
+import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 
@@ -339,8 +340,8 @@ onMounted(async () => {
       </p>
 
       <div class="mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-        <input v-model="filters.from" type="date" class="field sm:w-36" aria-label="起始日" />
-        <input v-model="filters.to" type="date" class="field sm:w-36" aria-label="结束日" />
+        <AppDateTimePicker v-model="filters.from" class="sm:w-36" aria-label="起始日" />
+        <AppDateTimePicker v-model="filters.to" class="sm:w-36" aria-label="结束日" />
         <AppSelect v-model="filters.type" class="sm:w-28" :options="filterTypeOptions" aria-label="类型" />
         <AppSelect v-model="filters.accountId" class="sm:w-32" :options="filterAccountOptions" aria-label="账户" />
         <AppSelect v-model="filters.categoryId" class="sm:w-32" :options="filterCategoryOptions" aria-label="分类" />
@@ -425,7 +426,7 @@ onMounted(async () => {
 
         <div>
           <label class="label" for="edit-time">发生时间</label>
-          <input id="edit-time" v-model="editForm.occurredAt" type="datetime-local" class="field" />
+          <AppDateTimePicker id="edit-time" v-model="editForm.occurredAt" mode="datetime" aria-label="发生时间" />
         </div>
 
         <div>

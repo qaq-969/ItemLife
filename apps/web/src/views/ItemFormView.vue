@@ -6,6 +6,7 @@ import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
 import { useDomainStore } from '@/stores/domain';
+import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppSelect from '@/components/AppSelect.vue';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
@@ -221,7 +222,7 @@ onMounted(async () => {
         </div>
         <div>
           <label class="label" for="item-date">购买日期</label>
-          <input id="item-date" v-model="form.purchaseDate" type="date" class="field" />
+          <AppDateTimePicker id="item-date" v-model="form.purchaseDate" aria-label="购买日期" />
         </div>
       </div>
 

@@ -377,7 +377,7 @@
           <tr>
             <td>UI / 样式</td>
             <td><strong>Tailwind CSS</strong> + 项目内无头组件<span class="tag tag-rec">已采用</span></td>
-            <td>断点前缀（<code>sm: md: lg:</code>）用于移动优先响应式布局；下拉与弹层由 <code>AppSelect</code> / <code>AppModal</code> 自实现，统一键盘、遮罩和动画行为。</td>
+            <td>断点前缀（<code>sm: md: lg:</code>）用于移动优先响应式布局；下拉、日期时间和弹层由 <code>AppSelect</code> / <code>AppDateTimePicker</code> / <code>AppModal</code> 自实现，统一触屏、遮罩和动画行为，不调用系统日期控件。</td>
           </tr>
           <tr>
             <td>状态 / 数据</td>
@@ -1017,7 +1017,7 @@
       </div>
       <div class="cell">
         <h5>Refresh Token</h5>
-        <p>HttpOnly + Secure + SameSite=Lax Cookie，仅 <code>/api/v1/auth</code> 路径可见；14 天有效；<strong>每次刷新即轮换</strong>（旧令牌立即吊销）；检测到已吊销令牌被复用 → 整族吊销并强制重新登录（令牌盗用响应）。</p>
+        <p>HttpOnly + SameSite=Lax Cookie，仅 <code>/api/v1/auth</code> 路径可见，HTTPS 链路自动启用 Secure；14 天有效；<strong>每次刷新即轮换</strong>（旧令牌立即吊销）。多标签页或 Safari 页面恢复造成的合法并发刷新有 30 秒宽限并自动重试；宽限期后检测到旧令牌复用 → 整族吊销并强制重新登录（令牌盗用响应）。</p>
       </div>
       <div class="cell">
         <h5>TOTP 防重放</h5>
