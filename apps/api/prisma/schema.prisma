@@ -54,6 +54,7 @@ enum ItemStatus {
 
 enum HouseholdRole {
   owner
+  admin
   member
 }
 

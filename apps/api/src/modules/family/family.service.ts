@@ -1,12 +1,19 @@
 import { createHash, randomInt } from 'node:crypto';
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { HouseholdDto, HouseholdInviteDto, HouseholdMemberDto } from '@itemlife/shared';
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
 import { seedPresetCategories } from '../categories/category-presets';
-import type { CreateHouseholdDto, CreateInviteDto, JoinHouseholdDto } from './dto/family.dto';
+import type {
+  CreateHouseholdDto,
+  CreateInviteDto,
+  DeleteHouseholdDto,
+  JoinHouseholdDto,
+  UpdateHouseholdDto,
+  UpdateHouseholdMemberRoleDto,
+} from './dto/family.dto';
 
 const INVITE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
@@ -41,6 +48,7 @@ export class FamilyService {
     const ownerUserId = this.userBytes(userId);
     const householdId = newId();
     const name = dto.name.trim();
+    if (!name) throw new BadRequestException({ code: 'HOUSEHOLD_NAME_REQUIRED', message: '家庭名称不能为空' });
     const created = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const household = await tx.household.create({ data: { id: householdId, name, ownerUserId } });
       await tx.householdMember.create({
@@ -51,6 +59,62 @@ export class FamilyService {
     });
     this.audit.record('family.household.created', { userId, householdId: bytesToUuid(householdId) });
     return { id: bytesToUuid(householdId), name, role: 'owner', memberCount: 1, createdAt: created.createdAt.toISOString() };
+  }
+
+  async update(userId: string, householdId: string, dto: UpdateHouseholdDto): Promise<HouseholdDto> {
+    const id = await this.requireOwner(userId, householdId);
+    const name = dto.name.trim();
+    if (!name) throw new BadRequestException({ code: 'HOUSEHOLD_NAME_REQUIRED', message: '家庭名称不能为空' });
+    const household = await this.prisma.household.update({ where: { id }, data: { name } });
+    const memberCount = await this.prisma.householdMember.count({ where: { householdId: id } });
+    this.audit.record('family.household.updated', { userId, householdId, name: household.name });
+    return {
+      id: householdId, name: household.name, role: 'owner', memberCount,
+      createdAt: household.createdAt.toISOString(),
+    };
+  }
+
+  async delete(userId: string, householdId: string, dto: DeleteHouseholdDto): Promise<null> {
+    const id = await this.requireOwner(userId, householdId);
+    const household = await this.prisma.household.findUnique({ where: { id } });
+    if (!household) throw familyNotFound();
+    if (dto.confirmationName.trim() !== household.name) {
+      throw new BadRequestException({ code: 'HOUSEHOLD_NAME_MISMATCH', message: '输入的家庭名称不一致' });
+    }
+
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const [items, transactions] = await Promise.all([
+        tx.item.findMany({ where: { ownerType: 'household', ownerId: id }, select: { id: true } }),
+        tx.transaction.findMany({ where: { ownerType: 'household', ownerId: id }, select: { id: true } }),
+      ]);
+      const itemIds = items.map((row) => row.id);
+      const transactionIds = transactions.map((row) => row.id);
+      const linkedRows = [
+        ...(itemIds.length ? [{ itemId: { in: itemIds } }] : []),
+        ...(transactionIds.length ? [{ transactionId: { in: transactionIds } }] : []),
+      ];
+
+      if (itemIds.length > 0) await tx.inventoryRevert.deleteMany({ where: { itemId: { in: itemIds } } });
+      if (linkedRows.length > 0) {
+        await tx.transactionItem.updateMany({ where: { OR: linkedRows }, data: { parentId: null } });
+        await tx.transactionItem.deleteMany({ where: { OR: linkedRows } });
+      }
+      if (itemIds.length > 0) {
+        await tx.accessoryUsage.deleteMany({ where: { itemId: { in: itemIds } } });
+        await tx.itemAccessory.deleteMany({ where: { itemId: { in: itemIds } } });
+        await tx.item.updateMany({ where: { id: { in: itemIds } }, data: { parentItemId: null, purchaseTransactionId: null } });
+        await tx.item.deleteMany({ where: { id: { in: itemIds } } });
+      }
+      if (transactionIds.length > 0) await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } });
+      await tx.category.updateMany({ where: { ownerType: 'household', ownerId: id }, data: { parentId: null } });
+      await tx.category.deleteMany({ where: { ownerType: 'household', ownerId: id } });
+      await tx.account.deleteMany({ where: { ownerType: 'household', ownerId: id } });
+      await tx.householdInvite.deleteMany({ where: { householdId: id } });
+      await tx.householdMember.deleteMany({ where: { householdId: id } });
+      await tx.household.deleteMany({ where: { id } });
+    });
+    this.audit.record('family.household.deleted', { userId, householdId, name: household.name });
+    return null;
   }
 
   async members(userId: string, householdId: string): Promise<HouseholdMemberDto[]> {
@@ -70,7 +134,7 @@ export class FamilyService {
   }
 
   async invites(userId: string, householdId: string): Promise<HouseholdInviteDto[]> {
-    const id = await this.requireOwner(userId, householdId);
+    const id = await this.requireManager(userId, householdId);
     const rows = await this.prisma.householdInvite.findMany({
       where: { householdId: id },
       orderBy: { createdAt: 'desc' },
@@ -79,7 +143,7 @@ export class FamilyService {
   }
 
   async createInvite(userId: string, householdId: string, dto: CreateInviteDto): Promise<HouseholdInviteDto> {
-    const id = await this.requireOwner(userId, householdId);
+    const id = await this.requireManager(userId, householdId);
     const code = this.inviteCode();
     const row = await this.prisma.householdInvite.create({
       data: {
@@ -96,7 +160,7 @@ export class FamilyService {
   }
 
   async revokeInvite(userId: string, householdId: string, inviteId: string): Promise<null> {
-    const id = await this.requireOwner(userId, householdId);
+    const id = await this.requireManager(userId, householdId);
     const inviteBytes = toIdBytes(inviteId);
     const row = inviteBytes ? await this.prisma.householdInvite.findFirst({ where: { id: inviteBytes, householdId: id } }) : null;
     if (!row) throw familyNotFound();
@@ -138,14 +202,50 @@ export class FamilyService {
   }
 
   async removeMember(userId: string, householdId: string, memberUserId: string): Promise<null> {
-    const id = await this.requireOwner(userId, householdId);
-    if (memberUserId === userId) throw new ConflictException({ code: 'OWNER_CANNOT_LEAVE', message: '家庭创建者不能移除自己' });
+    const actor = await this.requireMembership(userId, householdId);
+    if (actor.role !== 'owner' && actor.role !== 'admin') {
+      throw new ForbiddenException({ code: 'HOUSEHOLD_MANAGER_REQUIRED', message: '仅家庭创建者或管理员可以执行此操作' });
+    }
+    if (memberUserId === userId) throw new ConflictException({ code: 'MEMBER_CANNOT_REMOVE_SELF', message: '不能移除自己，请使用退出家庭' });
     const target = toIdBytes(memberUserId);
     if (!target) throw familyNotFound();
-    const result = await this.prisma.householdMember.deleteMany({ where: { householdId: id, userId: target, role: 'member' } });
+    const membership = await this.prisma.householdMember.findUnique({
+      where: { householdId_userId: { householdId: actor.id, userId: target } },
+    });
+    if (!membership || membership.role === 'owner') throw familyNotFound();
+    if (actor.role === 'admin' && membership.role !== 'member') {
+      throw new ForbiddenException({ code: 'ADMIN_CANNOT_MANAGE_ADMIN', message: '管理员只能移除普通成员' });
+    }
+    const result = await this.prisma.householdMember.deleteMany({ where: { householdId: actor.id, userId: target } });
     if (result.count === 0) throw familyNotFound();
     this.audit.record('family.member.removed', { userId, householdId, memberUserId });
     return null;
+  }
+
+  async updateMemberRole(
+    userId: string,
+    householdId: string,
+    memberUserId: string,
+    dto: UpdateHouseholdMemberRoleDto,
+  ): Promise<HouseholdMemberDto> {
+    const id = await this.requireOwner(userId, householdId);
+    if (memberUserId === userId) {
+      throw new ConflictException({ code: 'OWNER_ROLE_FIXED', message: '家庭创建者权限不能修改' });
+    }
+    const target = toIdBytes(memberUserId);
+    if (!target) throw familyNotFound();
+    const membership = await this.prisma.householdMember.findUnique({
+      where: { householdId_userId: { householdId: id, userId: target } }, include: { user: true },
+    });
+    if (!membership || membership.role === 'owner') throw familyNotFound();
+    const updated = await this.prisma.householdMember.update({
+      where: { id: membership.id }, data: { role: dto.role }, include: { user: true },
+    });
+    this.audit.record('family.member.role_updated', { userId, householdId, memberUserId, role: dto.role });
+    return {
+      userId: memberUserId, email: updated.user.email, nickname: updated.user.nickname,
+      role: updated.role, joinedAt: updated.joinedAt.toISOString(),
+    };
   }
 
   async leave(userId: string, householdId: string): Promise<null> {
@@ -159,12 +259,24 @@ export class FamilyService {
   }
 
   private async requireMember(userId: string, householdId: string): Promise<IdBytes> {
+    return (await this.requireMembership(userId, householdId)).id;
+  }
+
+  private async requireMembership(userId: string, householdId: string): Promise<{ id: IdBytes; role: 'owner' | 'admin' | 'member' }> {
     const id = toIdBytes(householdId);
     const userBytes = this.userBytes(userId);
     if (!id) throw familyNotFound();
     const membership = await this.prisma.householdMember.findUnique({ where: { householdId_userId: { householdId: id, userId: userBytes } } });
     if (!membership) throw familyNotFound();
-    return id;
+    return { id, role: membership.role };
+  }
+
+  private async requireManager(userId: string, householdId: string): Promise<IdBytes> {
+    const membership = await this.requireMembership(userId, householdId);
+    if (membership.role !== 'owner' && membership.role !== 'admin') {
+      throw new ForbiddenException({ code: 'HOUSEHOLD_MANAGER_REQUIRED', message: '仅家庭创建者或管理员可以执行此操作' });
+    }
+    return membership.id;
   }
 
   private async requireOwner(userId: string, householdId: string): Promise<IdBytes> {

@@ -59,7 +59,7 @@ pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/
 pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
 pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
 pnpm --filter @itemlife/api smoke:items    # 物品：成本 / 配件 / 流水联动删除 / 多级归属 等 82 项
-pnpm --filter @itemlife/api smoke:m4m5     # 家庭：邀请/成员/隔离；看板：汇总/趋势/占比/净值 等 25 项
+pnpm --filter @itemlife/api smoke:m4m5     # 家庭：三级权限/删改/隔离；看板：汇总/趋势/占比/净值 等 45 项
 ```
 
 只做前端联调时可以不起数据库，用内存替身跑后端（数据重启即清空）：

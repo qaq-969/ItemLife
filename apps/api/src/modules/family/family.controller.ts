@@ -1,10 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { HouseholdDto, HouseholdInviteDto, HouseholdMemberDto } from '@itemlife/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-user';
-import { CreateHouseholdDto, CreateInviteDto, JoinHouseholdDto } from './dto/family.dto';
+import {
+  CreateHouseholdDto,
+  CreateInviteDto,
+  DeleteHouseholdDto,
+  JoinHouseholdDto,
+  UpdateHouseholdDto,
+  UpdateHouseholdMemberRoleDto,
+} from './dto/family.dto';
 import { FamilyService } from './family.service';
 
 @ApiBearerAuth()
@@ -21,6 +28,18 @@ export class FamilyController {
   @ApiOperation({ summary: '创建家庭，同时创建 owner 成员关系与预置分类' })
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateHouseholdDto): Promise<HouseholdDto> {
     return this.family.create(user.id, dto);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: '创建者修改家庭名称' })
+  update(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateHouseholdDto): Promise<HouseholdDto> {
+    return this.family.update(user.id, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '创建者永久删除家庭及其全部数据' })
+  delete(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: DeleteHouseholdDto): Promise<null> {
+    return this.family.delete(user.id, id, dto);
   }
 
   @Post('join')
@@ -43,6 +62,16 @@ export class FamilyController {
   @Delete(':id/members/:userId')
   removeMember(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) memberId: string): Promise<null> {
     return this.family.removeMember(user.id, id, memberId);
+  }
+
+  @Patch(':id/members/:userId')
+  updateMemberRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) memberId: string,
+    @Body() dto: UpdateHouseholdMemberRoleDto,
+  ): Promise<HouseholdMemberDto> {
+    return this.family.updateMemberRole(user.id, id, memberId, dto);
   }
 
   @Get(':id/invites')

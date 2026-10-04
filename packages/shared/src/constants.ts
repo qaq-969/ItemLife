@@ -38,7 +38,7 @@ export type AllocationRole = (typeof ALLOCATION_ROLES)[number];
 /** 进总支付的两种角色（本体 + 附加费用），金额与本体价同口径。 */
 export const ITEM_COST_ROLES = ['body', 'fee'] as const satisfies readonly AllocationRole[];
 
-export const HOUSEHOLD_ROLES = ['owner', 'member'] as const;
+export const HOUSEHOLD_ROLES = ['owner', 'admin', 'member'] as const;
 export type HouseholdRole = (typeof HOUSEHOLD_ROLES)[number];
 
 /** 系统标签：驱动看板「收益」口径与自动结息流水识别。 */

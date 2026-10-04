@@ -42,14 +42,29 @@ async function main(): Promise<void> {
   assert.equal(joined.role, 'member');
   assert.equal((await family.members(memberUuid, household.id)).length, 2);
   assert.equal((await family.list(memberUuid))[0]?.id, household.id);
-  await assert.rejects(() => family.createInvite(memberUuid, household.id, {}), /仅家庭创建者/);
+  await assert.rejects(() => family.createInvite(memberUuid, household.id, {}), /创建者或管理员/);
 
-  const limited = await family.createInvite(ownerUuid, household.id, { maxUses: 1 });
+  const renamed = await family.update(ownerUuid, household.id, { name: '新测试家庭' });
+  assert.equal(renamed.name, '新测试家庭');
+  const promoted = await family.updateMemberRole(ownerUuid, household.id, memberUuid, { role: 'admin' });
+  assert.equal(promoted.role, 'admin');
+  assert.equal((await family.list(memberUuid))[0]?.role, 'admin');
+
+  const limited = await family.createInvite(memberUuid, household.id, { maxUses: 1 });
   await family.join(outsiderUuid, { code: limited.code! });
   await assert.rejects(() => family.join(lateUuid, { code: limited.code! }), /邀请码无效/);
 
+  const removable = await family.createInvite(memberUuid, household.id, { maxUses: 1 });
+  await family.join(lateUuid, { code: removable.code! });
+  await family.removeMember(memberUuid, household.id, lateUuid);
+  await assert.rejects(() => scopes.resolve(lateUuid, `household:${household.id}`), /数据域不存在/);
+  await assert.rejects(() => family.updateMemberRole(memberUuid, household.id, outsiderUuid, { role: 'admin' }), /仅家庭创建者/);
+  await family.updateMemberRole(ownerUuid, household.id, outsiderUuid, { role: 'admin' });
+  await assert.rejects(() => family.removeMember(memberUuid, household.id, outsiderUuid), /管理员只能移除普通成员/);
+  await family.updateMemberRole(ownerUuid, household.id, outsiderUuid, { role: 'member' });
+
   const revoked = await family.createInvite(ownerUuid, household.id, {});
-  await family.revokeInvite(ownerUuid, household.id, revoked.id);
+  await family.revokeInvite(memberUuid, household.id, revoked.id);
   await assert.rejects(() => family.join(lateUuid, { code: revoked.code! }), /邀请码无效/);
 
   const householdBytes = prisma.$tables.household.rows[0].id;
@@ -61,7 +76,7 @@ async function main(): Promise<void> {
   const incomeCategory = categories.find((row: any) => row.kind === 'income' && !row.systemTag)!;
 
   const addTransaction = async (type: string, amount: number, occurredAt: string, categoryId: Uint8Array, systemTag: string | null = null) => {
-    await prisma.transaction.create({ data: {
+    return prisma.transaction.create({ data: {
       id: newId(), ownerType: 'household', ownerId: householdBytes, type, amountMinor: BigInt(amount), accountId,
       categoryId, occurredAt: new Date(`${occurredAt}T12:00:00.000Z`), createdBy: ownerId, systemTag,
     } });
@@ -69,10 +84,23 @@ async function main(): Promise<void> {
   await addTransaction('income', 80_000, '2026-08-10', incomeCategory.id);
   await addTransaction('expense', 20_000, '2026-08-12', expenseCategory.id);
   await addTransaction('income', 100_000, '2026-09-03', incomeCategory.id);
-  await addTransaction('expense', 30_000, '2026-09-04', expenseCategory.id);
+  const purchaseTransaction = await addTransaction('expense', 30_000, '2026-09-04', expenseCategory.id);
   await addTransaction('income', 500, '2026-09-05', interestCategory.id, 'interest');
-  await prisma.item.create({ data: {
+  const householdItem = await prisma.item.create({ data: {
     id: newId(), ownerType: 'household', ownerId: householdBytes, name: '家庭物品', purchaseDate: new Date('2026-09-04T00:00:00.000Z'), purchasePriceMinor: 40_000n,
+  } });
+  const accessory = await prisma.itemAccessory.create({ data: {
+    id: newId(), itemId: householdItem.id, name: '家庭配件', unitPriceMinor: 1_000n, totalQty: 2, transactionId: purchaseTransaction.id,
+  } });
+  await prisma.accessoryUsage.create({ data: {
+    id: newId(), accessoryId: accessory.id, itemId: householdItem.id, deltaQty: 1, usedQtyAfter: 1, actorUserId: ownerId,
+  } });
+  await prisma.transactionItem.create({ data: {
+    id: newId(), transactionId: purchaseTransaction.id, itemId: householdItem.id, role: 'accessory', accessoryId: accessory.id, amountMinor: 2_000n,
+  } });
+  await prisma.inventoryRevert.create({ data: {
+    id: newId(), itemId: householdItem.id, accessoryId: accessory.id, sourceTransactionId: purchaseTransaction.id,
+    kind: 'correction', qty: 1, reason: '测试家庭删除', createdBy: ownerId,
   } });
 
   const query = { domain: `household:${household.id}`, from: '2026-09-01', to: '2026-09-30', granularity: 'day' as const };
@@ -82,7 +110,7 @@ async function main(): Promise<void> {
   assert.equal(overview.savingMinor, 70_500);
   assert.equal(overview.returnMinor, 500);
   assert.equal(overview.netWorthMinor, 140_500);
-  assert.equal(overview.itemInvestment.payTotalMinor, 40_000);
+  assert.equal(overview.itemInvestment.payTotalMinor, 42_000);
   assert.equal(overview.expenseComparison.previousMinor, 20_000);
 
   const trend = await dashboard.trend(memberUuid, query);
@@ -98,7 +126,14 @@ async function main(): Promise<void> {
 
   await family.removeMember(ownerUuid, household.id, memberUuid);
   await assert.rejects(() => scopes.resolve(memberUuid, `household:${household.id}`), /数据域不存在/);
-  console.log('M4/M5 smoke: 25 assertions passed');
+  await assert.rejects(() => family.delete(ownerUuid, household.id, { confirmationName: '名称不符' }), /家庭名称不一致/);
+  await family.delete(ownerUuid, household.id, { confirmationName: renamed.name });
+  assert.equal((await family.list(ownerUuid)).length, 0);
+  for (const table of ['household', 'householdMember', 'householdInvite', 'account', 'category', 'transaction', 'transactionItem', 'item', 'itemAccessory', 'accessoryUsage', 'inventoryRevert']) {
+    assert.equal(prisma.$tables[table].rows.length, 0, `${table} 应随家庭删除清空`);
+  }
+  assert.equal(prisma.$tables.user.rows.length, 4);
+  console.log('M4/M5 smoke: 45 assertions passed');
 }
 
 void main().catch((error) => { console.error(error); process.exitCode = 1; });
