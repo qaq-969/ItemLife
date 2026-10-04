@@ -71,7 +71,7 @@ ItemLife 同时管理资金流和物品成本。`transactions` 是金额的唯�
 
 ## 4. UI 与交互约定
 
-- 全站下拉与日期时间选择使用 `AppSelect`、`AppDateTimePicker` 等自实现控件，不调用浏览器原生 `<select>`、`date`、`time` 或 `datetime-local`。
+- 全站下拉与日期时间选择使用 `AppSelect`、`AppDateTimePicker` 等自实现控件，不调用浏览器原生 `<select>`、`date`、`time` 或 `datetime-local`；日期时间面板锚定输入框以下拉形式展开，不使用遮罩弹窗。
 - 移动端普通表单优先两列；短操作按钮按内容宽度，不强制占满半行。
 - 桌面端同一业务行尽量容纳完整字段；移动端复杂物品行最多两行，控件高度一致。
 - 支出/收入/转账、路由切换和弹窗使用短时淡入淡出与轻位移动画；遵守系统“减少动态效果”设置。
