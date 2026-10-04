@@ -5,6 +5,7 @@ import App from './App.vue';
 import { configureSession } from './api/http';
 import { router } from './router';
 import { useAuthStore } from './stores/auth';
+import { useDomainStore } from './stores/domain';
 import './assets/styles/main.css';
 
 async function bootstrap(): Promise<void> {
@@ -36,6 +37,7 @@ async function bootstrap(): Promise<void> {
 
   // 先恢复会话再挂载，避免首屏出现登录页闪烁
   await auth.bootstrap();
+  if (auth.isAuthenticated) await useDomainStore(pinia).load().catch(() => undefined);
 
   app.use(router);
   await router.isReady();

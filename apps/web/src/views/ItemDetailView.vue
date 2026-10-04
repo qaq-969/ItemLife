@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { formatMoney, type ItemDetailDto, type ItemStatus, type TransactionDto } from '@itemlife/shared';
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
+import { useDomainStore } from '@/stores/domain';
 import { init, use, type ECharts } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent } from 'echarts/components';
@@ -20,6 +21,7 @@ const STATUS_LABELS: Record<ItemStatus, string> = {
 
 const route = useRoute();
 const router = useRouter();
+const domain = useDomainStore();
 
 const detail = ref<ItemDetailDto | null>(null);
 const loading = ref(true);
@@ -47,7 +49,14 @@ async function load(): Promise<void> {
   if (detail.value === null) loading.value = true;
   errorText.value = null;
   try {
-    detail.value = await itemsApi.detail(id);
+    const loaded = await itemsApi.detail(id);
+    const inActiveDomain = loaded.owner.type === domain.owner.type
+      && (loaded.owner.type === 'user' || loaded.owner.id === domain.owner.id);
+    if (!inActiveDomain) {
+      await router.replace({ name: 'items' });
+      return;
+    }
+    detail.value = loaded;
     for (const accessory of detail.value.accessories) {
       qty[accessory.id] ??= '1';
     }

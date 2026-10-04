@@ -5,6 +5,7 @@ import { ITEM_STATUSES, formatMoney, type ItemDto, type ItemStatus, type ItemsOv
 import { itemsApi, type ItemQuery } from '@/api/items';
 import { ApiError } from '@/api/http';
 import AppSelect from '@/components/AppSelect.vue';
+import { useDomainStore } from '@/stores/domain';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
   in_use: '在役',
@@ -12,6 +13,7 @@ const STATUS_LABELS: Record<ItemStatus, string> = {
   retired: '退役',
   lost: '遗失',
 };
+const domain = useDomainStore();
 
 const overview = ref<ItemsOverviewDto | null>(null);
 const items = ref<ItemDto[]>([]);
@@ -29,10 +31,10 @@ async function reload(): Promise<void> {
   loading.value = true;
   errorText.value = null;
   try {
-    const query: ItemQuery = { limit: 20 };
+    const query: ItemQuery = { limit: 20, domain: domain.query };
     if (filters.value.status) query.status = filters.value.status;
     if (filters.value.keyword.trim()) query.keyword = filters.value.keyword.trim();
-    const [page, board] = await Promise.all([itemsApi.list(query), itemsApi.overview()]);
+    const [page, board] = await Promise.all([itemsApi.list(query), itemsApi.overview({ domain: domain.query })]);
     items.value = page.items;
     nextCursor.value = page.nextCursor;
     total.value = page.total ?? page.items.length;
@@ -49,7 +51,7 @@ async function loadMore(): Promise<void> {
   if (!cursor || loadingMore.value) return;
   loadingMore.value = true;
   try {
-    const query: ItemQuery = { limit: 20, cursor };
+    const query: ItemQuery = { limit: 20, cursor, domain: domain.query };
     if (filters.value.status) query.status = filters.value.status;
     if (filters.value.keyword.trim()) query.keyword = filters.value.keyword.trim();
     const page = await itemsApi.list(query);

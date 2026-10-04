@@ -4,6 +4,7 @@ import type {
   CategoryKind,
   InterestFreq,
   ItemStatus,
+  HouseholdRole,
   TransactionType,
 } from './constants';
 
@@ -11,6 +12,75 @@ import type {
 export interface OwnerRef {
   type: 'user' | 'household';
   id: string;
+}
+
+export interface HouseholdMemberDto {
+  userId: string;
+  email: string;
+  nickname: string | null;
+  role: HouseholdRole;
+  joinedAt: string;
+}
+
+export interface HouseholdInviteDto {
+  id: string;
+  expiresAt: string;
+  maxUses: number;
+  usedCount: number;
+  revokedAt: string | null;
+  createdAt: string;
+  /** 仅创建邀请的响应返回明文；列表永远不返回。 */
+  code?: string;
+}
+
+export interface HouseholdDto {
+  id: string;
+  name: string;
+  role: HouseholdRole;
+  memberCount: number;
+  createdAt: string;
+}
+
+export type DashboardGranularity = 'day' | 'week' | 'month';
+
+export interface DashboardComparisonDto {
+  currentMinor: number;
+  previousMinor: number;
+  changePercent: number | null;
+}
+
+export interface DashboardOverviewDto {
+  from: string;
+  to: string;
+  expenseMinor: number;
+  incomeMinor: number;
+  savingMinor: number;
+  returnMinor: number;
+  netWorthMinor: number;
+  expenseComparison: DashboardComparisonDto;
+  savingComparison: DashboardComparisonDto;
+  itemInvestment: Pick<ItemsOverviewDto, 'payTotalMinor' | 'holdCostMinor' | 'remainingStockMinor' | 'itemCount' | 'inUseCount'>;
+}
+
+export interface DashboardTrendPointDto {
+  period: string;
+  expenseMinor: number;
+  incomeMinor: number;
+  savingMinor: number;
+  returnMinor: number;
+  netWorthMinor: number;
+}
+
+export interface DashboardTrendDto {
+  from: string;
+  to: string;
+  granularity: DashboardGranularity;
+  points: DashboardTrendPointDto[];
+}
+
+export interface DashboardBreakdownDto {
+  categories: Array<{ id: string | null; name: string; color: string | null; amountMinor: number; percent: number }>;
+  accounts: Array<{ id: string; name: string; type: AccountType; balanceMinor: number; percent: number }>;
 }
 
 /** 分页响应包络（游标分页）。 */

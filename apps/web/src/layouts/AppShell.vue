@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { useDomainStore } from '@/stores/domain';
+import { useLedgerStore } from '@/stores/ledger';
+import AppSelect from '@/components/AppSelect.vue';
 
 /** 线性图标（stroke）路径表，避免引入图标库 */
 const ICON_PATHS = {
@@ -44,6 +47,8 @@ const sidebarNav: NavItem[] = [
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
+const domain = useDomainStore();
+const ledger = useLedgerStore();
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : 'ItemLife'));
 
@@ -55,6 +60,9 @@ async function handleLogout(): Promise<void> {
   await auth.logout();
   await router.push({ name: 'login' });
 }
+
+watch(() => domain.active, () => ledger.reset());
+onMounted(() => { void domain.load().catch(() => undefined); });
 </script>
 
 <template>
@@ -114,9 +122,13 @@ async function handleLogout(): Promise<void> {
       <main
         class="mx-auto w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <p class="text-xs font-semibold text-ink-3">当前数据域</p>
+          <AppSelect :model-value="domain.active" :options="domain.options" class="w-44" @update:model-value="domain.setActive" />
+        </div>
         <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="page" mode="out-in">
-            <component :is="Component" :key="String(currentRoute.name)" />
+            <component :is="Component" :key="`${String(currentRoute.name)}:${domain.active}`" />
           </Transition>
         </RouterView>
       </main>

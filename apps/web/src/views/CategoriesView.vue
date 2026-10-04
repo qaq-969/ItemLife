@@ -4,12 +4,14 @@ import type { CategoryDto, CategoryKind } from '@itemlife/shared';
 import { categoriesApi, type CategoryOrderItem } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
+import { useDomainStore } from '@/stores/domain';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 
 const KIND_LABELS: Record<CategoryKind, string> = { expense: '支出', income: '收入' };
 
 const ledger = useLedgerStore();
+const domain = useDomainStore();
 
 const kind = ref<CategoryKind>('expense');
 const includeArchived = ref(false);
@@ -77,6 +79,7 @@ async function submit(): Promise<void> {
         name,
         color: form.color,
         ...(form.parentId ? { parentId: form.parentId } : {}),
+        owner: domain.owner,
       });
       showMessage('分类已创建');
     }
@@ -108,7 +111,7 @@ async function move(node: CategoryDto, direction: -1 | 1): Promise<void> {
   busy.value = true;
   errorText.value = null;
   try {
-    await categoriesApi.reorder(items);
+    await categoriesApi.reorder(items, domain.owner);
     await ledger.loadCategories(includeArchived.value);
   } catch (error) {
     errorText.value = error instanceof ApiError ? error.message : '排序失败，请重试';

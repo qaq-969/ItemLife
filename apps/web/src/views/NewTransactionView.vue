@@ -8,6 +8,7 @@ import { ApiError } from '@/api/http';
 import AppSelect from '@/components/AppSelect.vue';
 import AllocationTreeNode from '@/components/AllocationTreeNode.vue';
 import { useLedgerStore } from '@/stores/ledger';
+import { useDomainStore } from '@/stores/domain';
 
 type EntryType = 'expense' | 'income' | 'transfer';
 type ItemRole = 'body' | 'accessory' | 'fee' | 'link';
@@ -16,6 +17,7 @@ interface AllocationRow { key: string; parentKey: string | null; role: ItemRole;
 const router = useRouter();
 const route = useRoute();
 const ledger = useLedgerStore();
+const domain = useDomainStore();
 const form = reactive({ entry: 'expense' as EntryType, amountYuan: '', accountId: '', toAccountId: '', categoryId: '', occurredAt: nowLocal(), note: '' });
 const rows = ref<AllocationRow[]>([]);
 const itemOptions = ref<ItemDto[]>([]);
@@ -72,13 +74,13 @@ async function submit(): Promise<void> {
   if (allocationSum.value > amount) return void (errorText.value = '物品与附加费用合计不能超过本笔支出');
   saving.value = true; pendingKey.value ??= crypto.randomUUID();
   try {
-    await transactionsApi.create({ type: transactionType.value, amountMinor: amount, accountId: form.accountId, ...(form.entry === 'transfer' ? { toAccountId: form.toAccountId } : { categoryId: form.categoryId }), ...(form.entry === 'expense' && rows.value.length ? { items: transactionItems() as never } : {}), ...(form.occurredAt ? { occurredAt: new Date(form.occurredAt).toISOString() } : {}), ...(form.note.trim() ? { note: form.note.trim() } : {}) }, pendingKey.value);
+    await transactionsApi.create({ type: transactionType.value, amountMinor: amount, accountId: form.accountId, owner: domain.owner, ...(form.entry === 'transfer' ? { toAccountId: form.toAccountId } : { categoryId: form.categoryId }), ...(form.entry === 'expense' && rows.value.length ? { items: transactionItems() as never } : {}), ...(form.occurredAt ? { occurredAt: new Date(form.occurredAt).toISOString() } : {}), ...(form.note.trim() ? { note: form.note.trim() } : {}) }, pendingKey.value);
     await ledger.refresh().catch(() => undefined); await router.push({ name: 'transactions' });
   } catch (error) { errorText.value = error instanceof ApiError ? error.message : '保存失败，请重试'; } finally { saving.value = false; }
 }
 
 watch([form, rows], () => { pendingKey.value = null; }, { deep: true });
-onMounted(async () => { await ledger.refresh().catch(() => undefined); form.accountId = ledger.accounts[0]?.id ?? ''; itemOptions.value = (await itemsApi.list({ limit: 100 }).catch(() => ({ items: [] }))).items; if (route.query.addItem === '1') rootMenuOpen.value = true; });
+onMounted(async () => { await ledger.refresh().catch(() => undefined); form.accountId = ledger.accounts[0]?.id ?? ''; itemOptions.value = (await itemsApi.list({ limit: 100, domain: domain.query }).catch(() => ({ items: [] }))).items; if (route.query.addItem === '1') rootMenuOpen.value = true; });
 </script>
 
 <template>

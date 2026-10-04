@@ -231,59 +231,64 @@ async function main(): Promise<void> {
     JSON.stringify(points),
   );
 
-  console.log('\n[5] 批次入库与删除保护');
+  console.log('\n[5] 配件只能随物品/流水创建，删除批次同步清理使用记录');
   const umbrella = await request('POST', '/items', {
-    body: { name: '折叠伞', purchaseDate: today, purchasePriceMinor: 3_600 },
+    body: {
+      name: '折叠伞', purchaseDate: today, purchasePriceMinor: 3_600,
+      accessories: [
+        { name: '备用伞套', unitPriceMinor: 3_000, totalQty: 2 },
+        { name: '伞柄套', unitPriceMinor: 1_000, totalQty: 4 },
+      ],
+    },
     token,
   });
   const umbrellaId = umbrella.body.data.id;
-  check('新建无配件的物品', umbrella.status === 201 && umbrella.body.data.accessoryCount === 0, JSON.stringify(umbrella.body).slice(0, 200));
+  check('建档时可随物品录入配件', umbrella.status === 201 && umbrella.body.data.accessoryCount === 2, JSON.stringify(umbrella.body).slice(0, 200));
 
-  const spareBatch = await request('POST', `/items/${umbrellaId}/accessories`, {
+  const appendBlocked = await request('POST', `/items/${umbrellaId}/accessories`, {
     body: { name: '备用伞套', unitPriceMinor: 3_000, totalQty: 2 },
     token,
   });
-  check('追加配件批次（默认购入日 = 今天）', spareBatch.status === 201 && spareBatch.body.data.purchasedAt === today, JSON.stringify(spareBatch.body).slice(0, 200));
-  const spareId = spareBatch.body.data.id;
+  check('物品页不再提供追加配件批次接口', appendBlocked.status === 404, JSON.stringify(appendBlocked.body).slice(0, 200));
+
   const withSpare = await request('GET', `/items/${umbrellaId}`, { token });
+  const spareId = withSpare.body.data.accessories.find((row: any) => row.name === '备用伞套').id;
+  const gripId = withSpare.body.data.accessories.find((row: any) => row.name === '伞柄套').id;
   check(
-    '批次入库后总支付 = 3600 + 2×3000 = 9600，持有成本不变（未使用不计入）',
-    withSpare.body.data.cost.payTotalMinor === 9_600 && withSpare.body.data.cost.holdCostMinor === 3_600,
+    '两个批次总支付 = 3600 + 2×3000 + 4×1000 = 13600，未使用不进持有成本',
+    withSpare.body.data.cost.payTotalMinor === 13_600 && withSpare.body.data.cost.holdCostMinor === 3_600,
     JSON.stringify(withSpare.body.data.cost),
   );
 
-  const removeUnused = await request('DELETE', `/accessories/${spareId}`, { token });
+  const removeUnused = await request('DELETE', `/accessories/${spareId}`, { body: { reason: '测试删除' }, token });
   check('未使用过的批次可删除', removeUnused.status === 200, JSON.stringify(removeUnused.body));
 
-  const brushBatch = await request('POST', `/items/${umbrellaId}/accessories`, {
-    body: { name: '伞柄套', unitPriceMinor: 1_000, totalQty: 4 },
-    token,
-  });
-  const brushBatchId = brushBatch.body.data.id;
-  await request('POST', `/accessories/${brushBatchId}/consume`, { body: { qty: 1 }, token });
-  const removeUsed = await request('DELETE', `/accessories/${brushBatchId}`, { token });
+  await request('POST', `/accessories/${gripId}/consume`, { body: { qty: 1 }, token });
+  const removeUsed = await request('DELETE', `/accessories/${gripId}`, { body: { reason: '撤销整批' }, token });
   check(
-    '已使用的批次不可删除（409 ACCESSORY_IN_USE）',
-    removeUsed.status === 409 && removeUsed.body.code === 'ACCESSORY_IN_USE',
+    '已使用批次也可删除（删除批次等价于撤销其使用）',
+    removeUsed.status === 200,
     JSON.stringify(removeUsed.body),
   );
+  const afterBatchDelete = await request('GET', `/items/${umbrellaId}`, { token });
+  check('删除后批次不再显示，相关使用记录同时删除', afterBatchDelete.body.data.accessories.length === 0 && afterBatchDelete.body.data.usages.length === 0, JSON.stringify(afterBatchDelete.body.data).slice(0, 240));
 
   console.log('\n[6] 物品看板');
   const overview = await request('GET', '/items/overview', { token });
   const data = overview.body.data;
-  // 牙刷：支付 64000 / 持有 48000 / 库存 16000；折叠伞：7600 / 4600（1×1000）/ 3000
+  // 牙刷：支付 64000 / 持有 48000 / 库存 16000；折叠伞：3600 / 3600 / 0
   check(
-    '总投入 = 64000 + 7600 = 71600 分',
-    overview.status === 200 && data.payTotalMinor === 71_600,
+    '总投入 = 64000 + 3600 = 67600 分',
+    overview.status === 200 && data.payTotalMinor === 67_600,
     JSON.stringify(data).slice(0, 240),
   );
-  check('持有成本合计 = 48000 + 4600 = 52600 分', data.holdCostMinor === 52_600, String(data.holdCostMinor));
-  check('配件库存价值合计 = 16000 + 3000 = 19000 分', data.remainingStockMinor === 19_000, String(data.remainingStockMinor));
+  check('持有成本合计 = 48000 + 3600 = 51600 分', data.holdCostMinor === 51_600, String(data.holdCostMinor));
+  check('配件库存价值只剩牙刷的 16000 分', data.remainingStockMinor === 16_000, String(data.remainingStockMinor));
   check('在册 2 件 / 在役 2 件', data.itemCount === 2 && data.inUseCount === 2, `${data.itemCount}/${data.inUseCount}`);
-  check('成本排行按日均持有成本倒序（折叠伞 4600 > 牙刷 480）', data.topCostly[0].id === umbrellaId, JSON.stringify(data.topCostly.map((row: any) => row.name)));
+  check('成本排行按日均持有成本倒序（折叠伞 3600 > 牙刷 480）', data.topCostly[0].id === umbrellaId, JSON.stringify(data.topCostly.map((row: any) => row.name)));
   check(
     '排行项自带成本指标（列表页免二次请求）',
-    data.topCostly[0].cost.dailyHoldCostMinor === 4_600 && data.topCostly[1].cost.dailyHoldCostMinor === 480,
+    data.topCostly[0].cost.dailyHoldCostMinor === 3_600 && data.topCostly[1].cost.dailyHoldCostMinor === 480,
     JSON.stringify(data.topCostly.map((row: any) => row.cost.dailyHoldCostMinor)),
   );
 
@@ -373,7 +378,7 @@ async function main(): Promise<void> {
   const ids = new Set([firstPage.body.data.items[0].id, secondPage.body.data.items[0].id]);
   check('第二页拿到另一件物品（无重复）', ids.size === 2 && secondPage.body.data.total === 2, JSON.stringify([...ids]));
 
-  const removed = await request('DELETE', `/items/${umbrellaId}`, { token });
+  const removed = await request('DELETE', `/items/${umbrellaId}`, { body: { reason: '测试删除物品' }, token });
   check('删除物品（软删）', removed.status === 200, JSON.stringify(removed.body));
   const goneDetail = await request('GET', `/items/${umbrellaId}`, { token });
   check('删除后详情 404', goneDetail.status === 404 && goneDetail.body.code === 'ITEM_NOT_FOUND');
@@ -381,8 +386,8 @@ async function main(): Promise<void> {
   check('删除后列表不再返回', afterDelete.body.data.items.length === 1 && afterDelete.body.data.total === 1, String(afterDelete.body.data.total));
   const afterDeleteOverview = await request('GET', '/items/overview', { token });
   check('删除后看板只剩 1 件在册', afterDeleteOverview.body.data.itemCount === 1 && afterDeleteOverview.body.data.payTotalMinor === 64_000, JSON.stringify(afterDeleteOverview.body.data).slice(0, 200));
-  const historyKept = await request('GET', `/transactions?itemId=${umbrellaId}`, { token });
-  check('物品删除不影响历史流水查询（分摊记录保留）', historyKept.body.data.total === 1, String(historyKept.body.data.total));
+  const removedAllocationHistory = await request('GET', `/transactions?itemId=${umbrellaId}`, { token });
+  check('删除物品后同步移除对应流水分摊', removedAllocationHistory.body.data.total === 0, String(removedAllocationHistory.body.data.total));
 
   console.log('\n[11] 记一笔的物品归属：内联新建 / 用途角色 / 批次绑定');
   const cupTx = await request('POST', '/transactions', {
@@ -490,39 +495,20 @@ async function main(): Promise<void> {
     String(afterLink.body.data.cost.unallocatedMinor),
   );
 
-  const refill = await request('POST', `/items/${cupId}/accessories`, {
-    body: { name: '滤芯', unitPriceMinor: 200, totalQty: 5 },
-    token,
-  });
-  const refillId = refill.body.data.id;
-  const mismatch = await request('POST', '/transactions', {
-    body: {
-      type: 'expense',
-      amountMinor: 900,
-      accountId: cash.body.data.id,
-      items: [{ itemId: cupId, role: 'accessory', accessoryId: refillId, amountMinor: 900 }],
-    },
-    token,
-  });
-  check(
-    '批次「单价×总数 ≠ 分摊金额」硬拦 409',
-    mismatch.status === 409 && mismatch.body.code === 'ACCESSORY_AMOUNT_MISMATCH',
-    JSON.stringify(mismatch.body),
-  );
-
   const refillTx = await request('POST', '/transactions', {
     body: {
       type: 'expense',
       amountMinor: 1_000,
       accountId: cash.body.data.id,
-      items: [{ itemId: cupId, role: 'accessory', accessoryId: refillId, amountMinor: 1_000 }],
+      items: [{ itemId: cupId, role: 'accessory', amountMinor: 1_000, newAccessory: { name: '滤芯', totalQty: 5 } }],
       note: '补滤芯',
     },
     token,
   });
+  const refillId = refillTx.body.data.items[0].accessoryId;
   const afterRefill = await request('GET', `/items/${cupId}`, { token });
   check(
-    '金额一致时挂账成功：批次指回本笔流水',
+    '配件必须通过流水创建，并指回本笔流水',
     refillTx.status === 201 && afterRefill.body.data.accessories.some((row: any) => row.id === refillId && row.transactionId === refillTx.body.data.id),
     JSON.stringify(afterRefill.body.data.accessories),
   );
@@ -565,17 +551,19 @@ async function main(): Promise<void> {
     },
     token,
   });
+  const afterIndivisible = await request('GET', `/items/${cupId}`, { token });
+  const indivisibleBatch = afterIndivisible.body.data.accessories.find((row: any) => row.name === '除不尽');
   check(
-    '新建批次金额除不尽被拒（409 ACCESSORY_AMOUNT_MISMATCH）',
-    indivisible.status === 409 && indivisible.body.code === 'ACCESSORY_AMOUNT_MISMATCH',
-    JSON.stringify(indivisible.body),
+    '金额除不尽时自动把余数计入第一件（100 ÷ 3 = 33，余 1）',
+    indivisible.status === 201 && indivisibleBatch.unitPriceMinor === 33 && indivisibleBatch.firstUnitExtraMinor === 1,
+    JSON.stringify(indivisibleBatch),
   );
 
   await request('DELETE', `/transactions/${feeTx.body.data.id}`, { token });
   const afterDeleteFee = await request('GET', `/items/${cupId}`, { token });
   check(
     '软删流水不再计入成本（fee 撤销：持有成本回到 8000）',
-    afterDeleteFee.body.data.cost.holdCostMinor === 8_000 && afterDeleteFee.body.data.cost.payTotalMinor === 11_400,
+    afterDeleteFee.body.data.cost.holdCostMinor === 8_000 && afterDeleteFee.body.data.cost.payTotalMinor === 11_500,
     JSON.stringify(afterDeleteFee.body.data.cost),
   );
 

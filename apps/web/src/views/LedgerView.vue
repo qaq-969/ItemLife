@@ -5,12 +5,14 @@ import { formatMoney, toMinor, toYuan, type AllocationRole, type TransactionDto 
 import { transactionsApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
+import { useDomainStore } from '@/stores/domain';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', transfer_in: '转入', transfer_out: '转出' };
 
 const ledger = useLedgerStore();
+const domain = useDomainStore();
 const route = useRoute();
 
 const items = ref<TransactionDto[]>([]);
@@ -77,6 +79,7 @@ const editCategoryOptions = computed(() => [{ value: '', label: '（无分类）
 
 function queryParams(): Record<string, string | number> {
   const params: Record<string, string | number> = { limit: 20, from: filters.from, to: filters.to };
+  if (domain.query) params.domain = domain.query;
   if (filters.type) params.type = filters.type;
   if (filters.accountId) params.accountId = filters.accountId;
   if (filters.categoryId) params.categoryId = filters.categoryId;
@@ -104,6 +107,7 @@ async function load(): Promise<void> {
     const range = await transactionsApi.summary({
       from: filters.from,
       to: filters.to,
+      ...(domain.query ? { domain: domain.query } : {}),
       ...(filters.accountId ? { accountId: filters.accountId } : {}),
     });
     summary.value = range;

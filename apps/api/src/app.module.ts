@@ -17,6 +17,8 @@ import { InterestModule } from './modules/interest/interest.module';
 import { ItemsModule } from './modules/items/items.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { OwnerScopeModule } from './common/scope/owner-scope.module';
+import { FamilyModule } from './modules/family/family.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -49,7 +51,11 @@ import { OwnerScopeModule } from './common/scope/owner-scope.module';
     InterestModule,
     // M3 物品与配件：物品档案 / 配件库存与审计 / 成本指标 / 物品看板
     ItemsModule,
-    // 后续模块（M4+）：FamilyModule / DashboardModule / UserModule
+    // M4 家庭协作：邀请码、成员管理与家庭数据域
+    FamilyModule,
+    // M5 综合看板：流水、账户余额与物品投入统一聚合
+    DashboardModule,
+    // 后续模块：UserModule
   ],
   providers: [
     // 全局限流（默认额度见 THROTTLE_* 环境变量），端点可用 @Throttle 收紧、@SkipThrottle 放开

@@ -2,12 +2,14 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { AccountDto, AccountSummaryDto, CategoryDto } from '@itemlife/shared';
 import { accountsApi, categoriesApi } from '@/api/ledger';
+import { useDomainStore } from '@/stores/domain';
 
 /**
  * 账本公共数据：账户与分类在多个页面（记一笔 / 流水 / 账户 / 分类管理）反复使用，
  * 集中缓存一次拉取，任何改动后调用 refresh() 保持一致。个人数据域（M2 范围）。
  */
 export const useLedgerStore = defineStore('ledger', () => {
+  const domain = useDomainStore();
   const accounts = ref<AccountDto[]>([]);
   const categories = ref<CategoryDto[]>([]);
   const summary = ref<AccountSummaryDto | null>(null);
@@ -32,44 +34,50 @@ export const useLedgerStore = defineStore('ledger', () => {
   }
 
   async function loadAccounts(): Promise<void> {
-    accounts.value = await accountsApi.list();
+    accounts.value = await accountsApi.list({ domain: domain.query });
   }
 
   async function loadCategories(includeArchived = false): Promise<void> {
-    categories.value = await categoriesApi.list({ includeArchived });
+    categories.value = await categoriesApi.list({ includeArchived, domain: domain.query });
   }
 
   async function loadSummary(): Promise<void> {
-    summary.value = await accountsApi.summary();
+    summary.value = await accountsApi.summary({ domain: domain.query });
   }
 
   /** 首次进入或数据变更后调用；并发调用共用同一次请求。 */
-  let inFlight: Promise<void> | null = null;
+  let inFlight: { key: string; promise: Promise<void> } | null = null;
+  let requestGeneration = 0;
 
   async function refresh(): Promise<void> {
-    inFlight ??= (async () => {
+    const key = domain.active;
+    if (inFlight?.key === key) return inFlight.promise;
+    const generation = ++requestGeneration;
+    const promise = (async () => {
       loading.value = true;
       error.value = null;
       try {
         const [accountRows, categoryRows, accountSummary] = await Promise.all([
-          accountsApi.list(),
-          categoriesApi.list(),
-          accountsApi.summary(),
+          accountsApi.list({ domain: domain.query }),
+          categoriesApi.list({ domain: domain.query }),
+          accountsApi.summary({ domain: domain.query }),
         ]);
-        accounts.value = accountRows;
-        categories.value = categoryRows;
-        summary.value = accountSummary;
-        loaded.value = true;
+        if (domain.active === key) {
+          accounts.value = accountRows;
+          categories.value = categoryRows;
+          summary.value = accountSummary;
+          loaded.value = true;
+        }
       } catch (cause) {
         error.value = cause instanceof Error ? cause.message : '数据加载失败';
         throw cause;
       } finally {
         loading.value = false;
-        inFlight = null;
+        if (requestGeneration === generation) inFlight = null;
       }
     })();
-
-    return inFlight;
+    inFlight = { key, promise };
+    return promise;
   }
 
   function reset(): void {
@@ -78,6 +86,8 @@ export const useLedgerStore = defineStore('ledger', () => {
     summary.value = null;
     loaded.value = false;
     error.value = null;
+    requestGeneration += 1;
+    inFlight = null;
   }
 
   return {

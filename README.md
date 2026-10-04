@@ -2,7 +2,8 @@
 
 以**物品为视角**的个人 / 家庭记账 Web 应用：既做常规收支记账与资产余额管理，又把支出与具体物品（及其配件）关联，回答「一件东西从买到用完，总共花了多少钱、每天成本是多少」。
 
-- **设计报告（先读这份）**：[`docs/design-report.html`](docs/design-report.html)
+- **当前需求基线（实现与验收先读）**：[`docs/current-requirements.md`](docs/current-requirements.md)
+- **系统设计与历史论证**：[`docs/design-report.html`](docs/design-report.html)
 - **目录结构说明（动手改代码前看）**：[`docs/project-structure.md`](docs/project-structure.md)
 - **已确认决策**：成本三核心指标（总支付 / 当前持有成本 / 日均持有成本）、一笔流水多物品分摊、账户利息自动计算、内网部署 + 外部反向代理、仅 CNY（预留汇率扩展）
 
@@ -57,7 +58,8 @@ pnpm dev:web                       # 终端 2：Vite（http://localhost:5173，/
 ```bash
 pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA → 令牌旋转 等 37 项
 pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
-pnpm --filter @itemlife/api smoke:items    # 物品：成本指标 / 配件消耗审计 / 看板 / 分摊关联 等 57 项
+pnpm --filter @itemlife/api smoke:items    # 物品：成本 / 配件 / 流水联动删除 / 多级归属 等 82 项
+pnpm --filter @itemlife/api smoke:m4m5     # 家庭：邀请/成员/隔离；看板：汇总/趋势/占比/净值 等 25 项
 ```
 
 只做前端联调时可以不起数据库，用内存替身跑后端（数据重启即清空）：
@@ -85,5 +87,5 @@ make migrate    # 容器内执行 prisma migrate deploy
 
 M1 骨架 + 认证 → M2 记账核心（含多物品分摊、利息） → M3 物品与配件成本 → M4 家庭协作 → M5 看板 → M6 加固与交付
 
-当前进度：M1 / M2 / M3 已完成（后端 + 前端 + 离线冒烟 + 浏览器验收），M4 起待开工。
+当前进度：M1–M5 已完成代码实现与离线验收；M6 的安全专项和多视口 E2E 待实施。
 逐项进度、有意偏差与验收记录见 [`docs/project-structure.md`](docs/project-structure.md) 第 9 章。

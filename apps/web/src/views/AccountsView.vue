@@ -14,6 +14,7 @@ import {
 import { accountsApi, interestApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
+import { useDomainStore } from '@/stores/domain';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 
@@ -33,6 +34,7 @@ const FREQ_LABELS: Record<InterestFreq, string> = {
 };
 
 const ledger = useLedgerStore();
+const domain = useDomainStore();
 
 const message = ref<string | null>(null);
 const errorText = ref<string | null>(null);
@@ -139,6 +141,7 @@ async function submit(): Promise<void> {
         type: form.type,
         initialBalanceMinor,
         ...(rateBp === null ? {} : { interestRateBp: rateBp, interestFreq: form.freq }),
+        owner: domain.owner,
       });
       showMessage('账户已创建');
     }
@@ -167,7 +170,7 @@ async function openSettle(account: AccountDto): Promise<void> {
   settlePreview.value = null;
   settleError.value = null;
   try {
-    const rows = await interestApi.preview({ accountId: account.id });
+    const rows = await interestApi.preview({ accountId: account.id, domain: domain.query });
     settlePreview.value = rows[0] ?? null;
     if (!settlePreview.value) settleError.value = '今天尚未产生新的计息天数';
   } catch (error) {

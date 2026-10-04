@@ -47,6 +47,18 @@ export function createInMemoryPrisma(): AnyDb {
 
     householdMember: createTable('householdMember', {
       defaults: () => ({ role: 'member', joinedAt: now() }),
+      relations: {
+        household: (row, tables) => tables.household.rows.find((household: any) => same(household.id, row.householdId)) ?? null,
+        user: (row, tables) => tables.user.rows.find((user: any) => same(user.id, row.userId)) ?? null,
+      },
+    }),
+
+    householdInvite: createTable('householdInvite', {
+      defaults: () => ({ maxUses: 5, usedCount: 0, revokedAt: null, createdAt: now() }),
+      relations: {
+        household: (row, tables) => tables.household.rows.find((household: any) => same(household.id, row.householdId)) ?? null,
+        creator: (row, tables) => tables.user.rows.find((user: any) => same(user.id, row.createdBy)) ?? null,
+      },
     }),
 
     account: createTable('account', {

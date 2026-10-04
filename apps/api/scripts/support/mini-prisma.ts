@@ -46,10 +46,14 @@ export function matchValue(actual: any, expected: any): boolean {
     if ('notIn' in expected) return !asArray(expected.notIn).some((value) => matchValue(actual, value));
     if ('equals' in expected) return matchValue(actual, expected.equals);
     if ('not' in expected) return !matchValue(actual, expected.not);
-    if ('lt' in expected) return actual !== null && compareValues(actual, expected.lt) < 0;
-    if ('lte' in expected) return actual !== null && compareValues(actual, expected.lte) <= 0;
-    if ('gt' in expected) return actual !== null && compareValues(actual, expected.gt) > 0;
-    if ('gte' in expected) return actual !== null && compareValues(actual, expected.gte) >= 0;
+    if ('lt' in expected || 'lte' in expected || 'gt' in expected || 'gte' in expected) {
+      if (actual === null) return false;
+      if ('lt' in expected && compareValues(actual, expected.lt) >= 0) return false;
+      if ('lte' in expected && compareValues(actual, expected.lte) > 0) return false;
+      if ('gt' in expected && compareValues(actual, expected.gt) <= 0) return false;
+      if ('gte' in expected && compareValues(actual, expected.gte) < 0) return false;
+      return true;
+    }
     if ('contains' in expected) return String(actual ?? '').includes(String(expected.contains));
     if ('startsWith' in expected) return String(actual ?? '').startsWith(String(expected.startsWith));
   }

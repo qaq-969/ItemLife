@@ -5,6 +5,7 @@ import { ITEM_STATUSES, toMinor, toYuan, type ItemStatus } from '@itemlife/share
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
 import { useLedgerStore } from '@/stores/ledger';
+import { useDomainStore } from '@/stores/domain';
 import AppSelect from '@/components/AppSelect.vue';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
@@ -24,6 +25,7 @@ interface BatchRow {
 const route = useRoute();
 const router = useRouter();
 const ledger = useLedgerStore();
+const domain = useDomainStore();
 
 const editingId = ref<string | null>(null);
 const isEdit = computed(() => editingId.value !== null);
@@ -62,6 +64,12 @@ async function loadForEdit(id: string): Promise<void> {
   loading.value = true;
   try {
     const detail = await itemsApi.detail(id);
+    const inActiveDomain = detail.owner.type === domain.owner.type
+      && (detail.owner.type === 'user' || detail.owner.id === domain.owner.id);
+    if (!inActiveDomain) {
+      await router.replace({ name: 'items' });
+      return;
+    }
     const bodyAllocations = detail.transactions.flatMap((transaction) =>
       transaction.items
         .filter((row) => row.itemId === detail.id && row.role === 'body')
@@ -161,6 +169,7 @@ async function submit(): Promise<void> {
         status: form.status,
         ...(form.note.trim() ? { note: form.note.trim() } : {}),
         ...(payloadBatches.length > 0 ? { accessories: payloadBatches } : {}),
+        owner: domain.owner,
       });
       await router.push({ name: 'item-detail', params: { id: created.id } });
     }
