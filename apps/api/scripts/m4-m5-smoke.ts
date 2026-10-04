@@ -115,6 +115,7 @@ async function main(): Promise<void> {
 
   const trend = await dashboard.trend(memberUuid, query);
   assert.equal(trend.points.reduce((sum, row) => sum + row.expenseMinor, 0), 30_000);
+  assert.equal(trend.points.reduce((sum, row) => sum + row.incomeMinor, 0), 100_500);
   assert.equal(trend.points.at(-1)?.netWorthMinor, 140_500);
   const breakdown = await dashboard.breakdown(memberUuid, query);
   assert.equal(breakdown.categories[0]?.amountMinor, 30_000);
@@ -133,7 +134,7 @@ async function main(): Promise<void> {
     assert.equal(prisma.$tables[table].rows.length, 0, `${table} 应随家庭删除清空`);
   }
   assert.equal(prisma.$tables.user.rows.length, 4);
-  console.log('M4/M5 smoke: 45 assertions passed');
+  console.log('M4/M5 smoke: 46 assertions passed');
 }
 
 void main().catch((error) => { console.error(error); process.exitCode = 1; });

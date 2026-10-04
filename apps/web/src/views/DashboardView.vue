@@ -36,7 +36,7 @@ const cards = computed(() => [
   { label: '消费', value: overview.value?.expenseMinor ?? 0, tone: 'text-ink', compare: overview.value?.expenseComparison.changePercent, reverse: true },
   { label: '储蓄', value: overview.value?.savingMinor ?? 0, tone: 'text-ok', compare: overview.value?.savingComparison.changePercent, reverse: false },
   { label: '收益', value: overview.value?.returnMinor ?? 0, tone: 'text-warn', compare: null, reverse: false },
-  { label: '净资产', value: overview.value?.netWorthMinor ?? 0, tone: 'text-brand', compare: null, reverse: false },
+  { label: '总资产', value: overview.value?.netWorthMinor ?? 0, tone: 'text-brand', compare: null, reverse: false },
 ]);
 
 function isoDay(date: Date): string {
@@ -80,15 +80,19 @@ async function renderCharts(): Promise<void> {
     const points = trend.value?.points ?? [];
     trendChart.setOption({
       animationDuration: 240,
-      color: ['#4f46e5', '#059669'],
-      grid: { left: 8, right: 12, top: 30, bottom: 8, containLabel: true },
+      color: ['#059669', '#ef4444', '#4f46e5'],
+      grid: { left: 8, right: 8, top: 34, bottom: 8, containLabel: true },
       tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMoney(Math.round(Number(value) * 100)) },
-      legend: { top: 0, data: ['消费', '储蓄'] },
+      legend: { top: 0, data: ['收入', '支出', '总资产'] },
       xAxis: { type: 'category', boundaryGap: false, data: points.map((row) => row.period), axisLabel: { hideOverlap: true } },
-      yAxis: { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
+      yAxis: [
+        { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
+        { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { show: false } },
+      ],
       series: [
-        { name: '消费', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.expenseMinor / 100), areaStyle: { opacity: 0.08 } },
-        { name: '储蓄', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.savingMinor / 100) },
+        { name: '收入', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.incomeMinor / 100) },
+        { name: '支出', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.expenseMinor / 100) },
+        { name: '总资产', type: 'line', smooth: true, symbolSize: 6, yAxisIndex: 1, data: points.map((row) => row.netWorthMinor / 100) },
       ],
     }, true);
   }
@@ -130,7 +134,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeCharts); tren
     </div>
 
     <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
-      <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">消费与储蓄趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div ref="trendEl" class="mt-3 h-64 w-full"></div></article>
+      <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div ref="trendEl" class="mt-3 h-64 w-full"></div></article>
       <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div v-if="breakdown?.categories.length" ref="categoryEl" class="mt-3 h-64 w-full"></div><p v-else class="mt-6 text-sm text-ink-3">该区间没有支出。</p></article>
     </div>
 
@@ -167,7 +171,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', resizeCharts); tren
 
     <details class="card p-4 text-sm">
       <summary class="cursor-pointer font-semibold">图表数据表</summary>
-      <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[560px] text-left text-xs"><thead class="text-ink-3"><tr><th class="py-2">期间</th><th>消费</th><th>收入</th><th>储蓄</th><th>收益</th><th>净值</th></tr></thead><tbody><tr v-for="row in trend?.points ?? []" :key="row.period" class="border-t border-line"><td class="py-2">{{ row.period }}</td><td>{{ formatMoney(row.expenseMinor) }}</td><td>{{ formatMoney(row.incomeMinor) }}</td><td>{{ formatMoney(row.savingMinor) }}</td><td>{{ formatMoney(row.returnMinor) }}</td><td>{{ formatMoney(row.netWorthMinor) }}</td></tr></tbody></table></div>
+      <div class="mt-3 overflow-x-auto"><table class="w-full min-w-[420px] text-left text-xs"><thead class="text-ink-3"><tr><th class="py-2">期间</th><th>收入</th><th>支出</th><th>总资产</th></tr></thead><tbody><tr v-for="row in trend?.points ?? []" :key="row.period" class="border-t border-line"><td class="py-2">{{ row.period }}</td><td>{{ formatMoney(row.incomeMinor) }}</td><td>{{ formatMoney(row.expenseMinor) }}</td><td>{{ formatMoney(row.netWorthMinor) }}</td></tr></tbody></table></div>
     </details>
   </section>
 </template>

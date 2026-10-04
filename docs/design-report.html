@@ -267,7 +267,7 @@
     <div class="grid g3">
       <div class="cell">
         <h5><span class="num" style="background:var(--c-primary)">记</span>记账</h5>
-        <p>账户资产余额管理、自定义分类、收入 / 支出 / 转账、消费与储蓄趋势看板。</p>
+        <p>账户资产余额管理、自定义分类、收入 / 支出 / 转账、收支与总资产趋势看板。</p>
       </div>
       <div class="cell">
         <h5><span class="num" style="background:var(--c-green)">物</span>物品</h5>
@@ -297,7 +297,7 @@
           <tr><td>账户 / 分类 / 收支转账记账、资产余额、账户利息自动计算</td><td>银行账单自动导入、多币种界面与实时汇率（v1.0 仅 CNY，数据模型与转换接口已预留，见 5.4）</td></tr>
           <tr><td>物品-支出关联、配件库存、成本看板</td><td>物品图片 OCR 识别、保修到期提醒推送</td></tr>
           <tr><td>邀请码家庭、创建者/管理员/成员权限、家庭删改、个人 / 家庭数据域切换</td><td>家庭预算、审批流、创建者转让、自定义权限角色</td></tr>
-          <tr><td>消费 / 储蓄 / 收益趋势看板（收益含自动结息利息）</td><td>原生 App（iOS / Android）、桌面客户端</td></tr>
+          <tr><td>收入 / 支出 / 总资产趋势看板（总资产按账户余额沿流水回溯）</td><td>原生 App（iOS / Android）、桌面客户端</td></tr>
         </tbody>
       </table>
     </div>
@@ -326,7 +326,7 @@
           <tr><td>FR-12</td><td>物品</td><td>「物品」看板：物品总览、总投入、按类别统计、高成本物品排行</td><td><span class="tag tag-rec">P1</span></td></tr>
           <tr><td>FR-13</td><td>家庭</td><td>创建/改名/删除家庭、邀请码加入、创建者/管理员/成员三级权限、退出与成员管理</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-14</td><td>家庭</td><td>添加记账 / 物品时选择归属：个人 或 某个家庭；列表按数据域筛选</td><td><span class="tag tag-rec">P0</span></td></tr>
-          <tr><td>FR-15</td><td>看板</td><td>趋势看板：消费金额、储蓄额度、收益（含自动结息利息）趋势；时间粒度（日 / 周 / 月）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-15</td><td>看板</td><td>“收支与总资产趋势”同时展示全部收入、全部支出和期末总资产三条曲线；时间粒度（日 / 周 / 月）</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-16</td><td>看板</td><td>分类占比、账户余额分布、收支对比、同环比</td><td><span class="tag tag-rec">P1</span></td></tr>
           <tr><td>FR-17</td><td>记账</td><td>账户利息自动计算：账户可配置年化利率与结息周期，按日计息、周期入账（幂等防重），支持手动结息</td><td><span class="tag tag-rec">P1</span></td></tr>
           <tr><td>FR-18</td><td>设置</td><td>个人资料、修改密码（需二次验证）、MFA 开启 / 重绑 / 关闭、恢复码重置</td><td><span class="tag tag-rec">P0</span></td></tr>
@@ -876,7 +876,7 @@
           <tr><td>POST</td><td><code>/households/join</code></td><td>凭邀请码加入家庭</td><td>JWT · 限流</td></tr>
           <tr><td>GET/PATCH/DELETE</td><td><code>/households/:id/members[/:uid]</code></td><td>成员列表 / owner 任免管理员 / owner 或 admin 移除其权限范围内的成员 / 自行退出</td><td>JWT · 角色校验</td></tr>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">看板与设置（模块 Dashboard / User）</td></tr>
-          <tr><td>GET</td><td><code>/dashboard/trend</code></td><td>一次返回消费 / 收入 / 储蓄 / 收益 / 净值趋势：<code>?domain=&amp;granularity=day|week|month&amp;from=&amp;to=</code></td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/dashboard/trend</code></td><td>返回收入 / 支出 / 总资产趋势及储蓄、收益扩展数据：<code>?domain=&amp;granularity=day|week|month&amp;from=&amp;to=</code></td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/dashboard/breakdown</code></td><td>分类占比 / 账户分布 / 环比同比</td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/dashboard/overview</code></td><td>消费 / 储蓄 / 收益 / 净值、上一等长周期对比与物品投入</td><td>JWT</td></tr>
           <tr><td>GET/PATCH</td><td><code>/users/me</code></td><td>个人资料查看 / 修改昵称</td><td>JWT</td></tr>
@@ -1126,10 +1126,11 @@
       <table>
         <thead><tr><th style="width:150px">指标</th><th style="width:270px">定义</th><th>可视化</th></tr></thead>
         <tbody>
-          <tr><td>消费金额</td><td>区间内 <code>type=expense</code> 求和</td><td>折线 / 柱状趋势（日 / 周 / 月粒度），可叠加分类堆叠</td></tr>
+          <tr><td>支出</td><td>区间内 <code>type=expense</code> 求和</td><td>“收支与总资产趋势”左轴折线（日 / 周 / 月粒度）</td></tr>
+          <tr><td>收入</td><td>区间内 <code>type=income</code> 求和</td><td>“收支与总资产趋势”左轴折线（日 / 周 / 月粒度）</td></tr>
           <tr><td>储蓄额度</td><td>区间内 收入 − 支出（净结余）</td><td>面积折线 + 目标线；按月对比柱状</td></tr>
           <tr><td>收益</td><td>分类带 <code>system_tag=investment_return</code> 的收入 + 自动结息流水（<code>system_tag=interest</code>，见 8.5）合计</td><td>独立折线 + 累计收益曲线</td></tr>
-          <tr><td>资产净值</td><td>Σ 全部账户余额（沿时间回溯）</td><td>净值曲线（资产 vs 负债双线）</td></tr>
+          <tr><td>总资产</td><td>Σ 全部账户余额（沿流水按时间回溯）</td><td>“收支与总资产趋势”右轴折线，避免资产存量压缩收支曲线</td></tr>
           <tr><td>分类占比</td><td>区间内按分类聚合</td><td>环形图 + Top10 排行</td></tr>
           <tr><td>同比 / 环比</td><td>与上一周期对比</td><td>涨跌徽章 + 差值标注</td></tr>
         </tbody>
@@ -1262,7 +1263,7 @@
                 <div class="blk" style="flex-direction:column"><b>净资产</b>¥86,400</div>
               </div>
               <div class="wf-row" style="grid-template-columns:2fr 1fr">
-                <div class="blk tall" style="min-height:110px">消费 / 储蓄趋势折线（月粒度 · 可切日/周）</div>
+                <div class="blk tall" style="min-height:110px">收入 / 支出 / 总资产趋势折线（月粒度 · 可切日/周）</div>
                 <div class="blk tall" style="min-height:110px">分类占比环形图</div>
               </div>
               <div class="wf-row" style="grid-template-columns:1fr 1fr">
@@ -1584,7 +1585,7 @@
           </tr>
           <tr>
             <td><strong>M5</strong><br>看板<br><span class="tag tag-rec">已完成</span></td>
-            <td>消费 / 储蓄 / 收益（含自动结息）/ 净值趋势、分类占比、同环比、物品投入统计</td>
+            <td>收入 / 支出 / 总资产趋势、分类占比、同环比、收益与物品投入统计</td>
             <td>看板数字与流水手工核算一致；三档设备上图表可读、交互流畅</td>
           </tr>
           <tr>
