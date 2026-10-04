@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { User } from '@prisma/client';
+import type { SiteRole } from '@itemlife/shared';
 import { bytesToUuid } from '../../../common/utils/id';
 
 export class AuthUserVo {
@@ -15,12 +16,16 @@ export class AuthUserVo {
   @ApiProperty({ description: '是否已开启两步验证' })
   mfaEnabled!: boolean;
 
+  @ApiProperty({ enum: ['super_admin', 'admin', 'user'], description: '站点级角色' })
+  siteRole!: SiteRole;
+
   static from(user: User): AuthUserVo {
     const vo = new AuthUserVo();
     vo.id = bytesToUuid(user.id);
     vo.email = user.email;
     vo.nickname = user.nickname;
     vo.mfaEnabled = user.mfaEnabled;
+    vo.siteRole = user.siteRole;
     return vo;
   }
 }

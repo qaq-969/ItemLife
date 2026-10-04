@@ -58,6 +58,12 @@ enum HouseholdRole {
   member
 }
 
+enum SiteRole {
+  super_admin
+  admin
+  user
+}
+
 /// 这笔钱算在物品的哪一部分（设计报告联动调整方案 §5.4）：
 /// body 本体采购 / fee 附加费用（维修、运费）/ accessory 配件采购 / link 仅关联（不进成本）
 enum AllocationRole {
@@ -86,6 +92,8 @@ model User {
   totpConfirmedAt DateTime? @map("totp_confirmed_at")
   /// 最后成功验证的 TOTP 时间步：同一窗口内的动态码二次提交一律拒绝（防重放，见设计报告 7.3）
   lastTotpStep    BigInt?   @map("last_totp_step")
+  siteRole        SiteRole  @default(user) @map("site_role")
+  disabledAt      DateTime? @map("disabled_at")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
@@ -98,8 +106,33 @@ model User {
   createdTransactions Transaction[]   @relation("TransactionCreator")
   accessoryUsages     AccessoryUsage[]
   inventoryReverts   InventoryRevert[]
+  createdSiteInvites SiteInvite[]      @relation("SiteInviteCreator")
 
   @@map("users")
+}
+
+model SiteSettings {
+  id               Int      @id @default(1)
+  registrationOpen Boolean  @default(true) @map("registration_open")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model SiteInvite {
+  id        Bytes     @id @db.Binary(16)
+  codeHash  String    @unique @map("code_hash") @db.Char(64)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdBy Bytes     @map("created_by") @db.Binary(16)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  creator User @relation("SiteInviteCreator", fields: [createdBy], references: [id])
+
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@map("site_invites")
 }
 
 model RefreshToken {

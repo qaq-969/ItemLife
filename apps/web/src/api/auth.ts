@@ -1,16 +1,19 @@
 import { http, unwrap } from './http';
+import type { SiteRole } from '@itemlife/shared';
 
 export interface AuthUser {
   id: string;
   email: string;
   nickname: string | null;
   mfaEnabled: boolean;
+  siteRole: SiteRole;
 }
 
 export interface RegisterPayload {
   email: string;
   password: string;
   nickname?: string;
+  inviteCode?: string;
 }
 
 export interface LoginPayload {

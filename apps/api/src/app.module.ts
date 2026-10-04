@@ -19,6 +19,7 @@ import { TransactionsModule } from './modules/transactions/transactions.module';
 import { OwnerScopeModule } from './common/scope/owner-scope.module';
 import { FamilyModule } from './modules/family/family.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { SiteAdminModule } from './modules/site-admin/site-admin.module';
 
 @Module({
   imports: [
@@ -55,7 +56,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     FamilyModule,
     // M5 综合看板：流水、账户余额与物品投入统一聚合
     DashboardModule,
-    // 后续模块：UserModule
+    SiteAdminModule,
   ],
   providers: [
     // 全局限流（默认额度见 THROTTLE_* 环境变量），端点可用 @Throttle 收紧、@SkipThrottle 放开

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { checkPasswordStrength } from '@itemlife/shared';
 import { AuditService } from '../../common/audit/audit.service';
@@ -55,12 +55,36 @@ export class AuthService {
 
     const passwordHash = await this.crypto.hashPassword(dto.password);
     const user = await this.prisma.$transaction(async (tx) => {
+      // 更新单例设置行以串行化并发注册，确保只会产生一个首位超级管理员。
+      const settings = await tx.siteSettings.update({
+        where: { id: 1 },
+        data: { updatedAt: new Date() },
+      });
+
+      const userCount = await tx.user.count({ where: { deletedAt: null } });
+      if (userCount > 0 && !settings.registrationOpen) {
+        const codeHash = this.crypto.sha256Hex(dto.inviteCode?.trim().toUpperCase() ?? '');
+        const invite = dto.inviteCode
+          ? await tx.siteInvite.findUnique({ where: { codeHash } })
+          : null;
+        const now = new Date();
+        if (!invite || invite.usedAt || invite.revokedAt || invite.expiresAt <= now) {
+          throw invalidInvite();
+        }
+        const claimed = await tx.siteInvite.updateMany({
+          where: { id: invite.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
+          data: { usedAt: now },
+        });
+        if (claimed.count !== 1) throw invalidInvite();
+      }
+
       const created = await tx.user.create({
         data: {
           id: newId(),
           email,
           passwordHash,
           nickname: dto.nickname?.trim() || null,
+          siteRole: userCount === 0 ? 'super_admin' : 'user',
         },
       });
       // 预置分类随注册一次性复制到个人数据域（设计报告 5.2 ⑦），失败则整体回滚
@@ -79,7 +103,7 @@ export class AuthService {
     await this.throttle.assertNotLocked(scope);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || user.deletedAt) {
+    if (!user || user.deletedAt || user.disabledAt) {
       // 账号不存在时也走一次哈希比对，抹平响应耗时差异，避免账号枚举
       await this.crypto.verifyPasswordDummy(dto.password);
       await this.throttle.recordFailure(scope, { email, ip: device.ip });
@@ -110,7 +134,7 @@ export class AuthService {
     const ticket = await this.tokenService.verifyMfaTicket(dto.mfaTicket);
     const userId = toIdBytes(ticket.sub);
     const user = userId ? await this.prisma.user.findUnique({ where: { id: userId } }) : null;
-    if (!user || user.deletedAt || !user.mfaEnabled) {
+    if (!user || user.deletedAt || user.disabledAt || !user.mfaEnabled) {
       throw new UnauthorizedException({
         code: 'MFA_TICKET_INVALID',
         message: '两步验证票据已失效，请重新登录',
@@ -138,7 +162,7 @@ export class AuthService {
 
     const rotated = await this.tokenService.rotateRefreshToken(rawToken, device);
     const user = await this.prisma.user.findUnique({ where: { id: rotated.userId } });
-    if (!user || user.deletedAt) {
+    if (!user || user.deletedAt || user.disabledAt) {
       await this.tokenService.revokeSession(bytesToUuid(rotated.id));
       throw new UnauthorizedException({ code: 'REFRESH_TOKEN_INVALID', message: '登录状态已失效，请重新登录' });
     }
@@ -209,7 +233,7 @@ export class AuthService {
   private async requireUser(userId: string): Promise<User> {
     const id = toIdBytes(userId);
     const user = id ? await this.prisma.user.findUnique({ where: { id } }) : null;
-    if (!user || user.deletedAt) {
+    if (!user || user.deletedAt || user.disabledAt) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: '登录状态已失效，请重新登录' });
     }
     return user;
@@ -223,4 +247,11 @@ function normalizeEmail(email: string): string {
 /** 统一的登录失败响应：不区分「账号不存在」与「密码错误」 */
 function invalidCredentials(): UnauthorizedException {
   return new UnauthorizedException({ code: 'INVALID_CREDENTIALS', message: '邮箱或密码不正确' });
+}
+
+function invalidInvite(): ForbiddenException {
+  return new ForbiddenException({
+    code: 'SITE_INVITE_INVALID',
+    message: '邀请码无效、已使用或已过期',
+  });
 }

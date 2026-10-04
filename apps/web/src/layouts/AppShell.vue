@@ -16,6 +16,7 @@ const ICON_PATHS = {
   users:
     'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M2.5 20a6.5 6.5 0 0 1 13 0M16.2 11.4A3 3 0 0 0 16 5.4M17.5 20a7 7 0 0 0-1.8-4.7',
   settings: 'M4 7h6M14 7h6M4 12h10M18 12h2M4 17h4M12 17h8',
+  shield: 'M12 3.2 19 6v5.3c0 4.4-2.9 7.8-7 9.5-4.1-1.7-7-5.1-7-9.5V6zM9.5 12l1.7 1.7 3.6-4',
 } as const;
 
 interface NavItem {
@@ -34,7 +35,7 @@ const bottomNav: NavItem[] = [
 ];
 
 /** ≥1024px 左固定侧边栏 */
-const sidebarNav: NavItem[] = [
+const baseSidebarNav: NavItem[] = [
   { name: 'dashboard', label: '首页', icon: 'home' },
   { name: 'transactions', label: '流水', icon: 'list' },
   { name: 'transaction-new', label: '记一笔', icon: 'plus' },
@@ -49,6 +50,13 @@ const router = useRouter();
 const auth = useAuthStore();
 const domain = useDomainStore();
 const ledger = useLedgerStore();
+const sidebarNav = computed<NavItem[]>(() => {
+  const items = [...baseSidebarNav];
+  if (auth.user?.siteRole === 'super_admin' || auth.user?.siteRole === 'admin') {
+    items.splice(items.length - 1, 0, { name: 'site-admin', label: '站点管理', icon: 'shield' });
+  }
+  return items;
+});
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : 'ItemLife'));
 

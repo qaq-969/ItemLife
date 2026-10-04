@@ -14,6 +14,7 @@
     "smoke:ledger": "ts-node --transpile-only scripts/ledger-smoke.ts",
     "smoke:items": "ts-node --transpile-only scripts/items-smoke.ts",
     "smoke:m4m5": "ts-node --transpile-only scripts/m4-m5-smoke.ts",
+    "smoke:site-admin": "ts-node --transpile-only scripts/site-admin-smoke.ts",
     "smoke:accessory-delete": "node scripts/accessory-delete-smoke.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

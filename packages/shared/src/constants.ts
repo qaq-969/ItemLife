@@ -41,6 +41,9 @@ export const ITEM_COST_ROLES = ['body', 'fee'] as const satisfies readonly Alloc
 export const HOUSEHOLD_ROLES = ['owner', 'admin', 'member'] as const;
 export type HouseholdRole = (typeof HOUSEHOLD_ROLES)[number];
 
+export const SITE_ROLES = ['super_admin', 'admin', 'user'] as const;
+export type SiteRole = (typeof SITE_ROLES)[number];
+
 /** 系统标签：驱动看板「收益」口径与自动结息流水识别。 */
 export const SYSTEM_TAGS = {
   investmentReturn: 'investment_return',

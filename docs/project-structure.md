@@ -3,7 +3,7 @@
 > 配套文档：[`current-requirements.md`](current-requirements.md)（当前实现与验收基线）·
 > [`design-report.html`](design-report.html)（系统设计报告，写「为什么这么设计」）·
 > 本文档写「东西放在哪、新代码该往哪加」。
-> 最后更新：2026-10-04（M4 家庭协作与 M5 综合看板完成后）。
+> 最后更新：2026-10-04（站点管理与 NAS Compose 交付完成后）。
 
 ## 0. 一句话总览
 
@@ -71,7 +71,8 @@ apps/web/
 │   │   ├── ledger.ts         #   记账域请求 + 类型：accounts / categories / transactions / interestApi
 │   │   ├── items.ts          #   物品域请求 + 类型：itemsApi（使用 / 撤销、物品 overview）
 │   │   ├── family.ts         #   家庭、邀请和成员请求
-│   │   └── dashboard.ts      #   综合看板汇总、趋势与占比请求
+│   │   ├── dashboard.ts      #   综合看板汇总、趋势与占比请求
+│   │   └── site-admin.ts     #   站点注册开关、邀请码、角色和用户状态
 │   ├── stores/               # Pinia：跨页面共享状态
 │   │   ├── auth.ts           #   令牌（仅内存）、当前用户、MFA 票据、login/logout/bootstrap
 │   │   ├── ledger.ts         #   当前数据域的账户 / 分类 / 汇总缓存
@@ -85,7 +86,7 @@ apps/web/
 │   │   ├── LedgerView.vue  NewTransactionView.vue
 │   │   ├── AccountsView.vue  CategoriesView.vue
 │   │   ├── ItemsView.vue  ItemDetailView.vue  ItemFormView.vue
-│   │   ├── DashboardView.vue  FamilyView.vue
+│   │   ├── DashboardView.vue  FamilyView.vue  SiteAdminView.vue
 │   │   ├── MeView.vue  SecurityView.vue  SettingsView.vue
 │   │   └── NotFoundView.vue
 │   ├── components/           # 可复用小组件（AuthCard / PagePlaceholder / AppModal）
@@ -114,6 +115,7 @@ apps/api/
 │   ├── auth-smoke.ts         #   认证链路冒烟（内存假 DB/Redis，无需 MySQL 即可跑）
 │   ├── ledger-smoke.ts       #   记账核心冒烟（分类 / 账户 / 流水 / 转账 / 结息）
 │   ├── items-smoke.ts        #   物品与配件冒烟（成本指标 / 配件消耗审计 / 看板 / 分摊关联）
+│   ├── site-admin-smoke.ts   #   首位超管、注册开关、邀请码、角色与停用冒烟
 │   └── support/
 │       ├── mini-prisma.ts    #   通用内存 Prisma 引擎（按 schema 建表 + 关系解析）
 │       └── in-memory.ts      #   本仓库的表定义与 Redis 替身
@@ -145,7 +147,8 @@ apps/api/
 │       ├── interest/          #   结息：Cron 自动 + 手动预览与入账（见 4.4）
 │       ├── items/             #   物品 / 配件库存与审计 / 成本指标 / 物品看板（见 4.5）
 │       ├── family/            #   M4 家庭、邀请码和成员权限
-│       └── dashboard/         #   M5 收入 / 支出 / 总资产趋势与占比聚合
+│       ├── dashboard/         #   M5 收入 / 支出 / 总资产趋势与占比聚合
+│       └── site-admin/        #   站点注册开关、邀请码、角色和用户状态
 ├── nest-cli.json  tsconfig.json  tsconfig.build.json
 └── Dockerfile  docker-entrypoint.sh   # 容器入口：等 DB → 迁移 → 启动
 ```
@@ -273,6 +276,7 @@ modules/auth/
 | `pnpm --filter @itemlife/api smoke:ledger` | **记账核心离线冒烟**：预置分类 → 分类增删改排序 → 账户与派生余额 → 记一笔与分摊校验 → 转账联动 → 改删回滚 → 列表筛选分页小计 → 幂等键 → 结息幂等 → 数据域隔离，共 66 项断言 |
 | `pnpm --filter @itemlife/api smoke:items` | **物品与配件离线冒烟**：牙刷成本验收 → 消耗 / 撤销与审计 → 批次联动删除 → 看板 → 多级流水归属 → 金额余数分配 → 跨页面删除同步 → 数据域隔离，共 82 项断言 |
 | `pnpm --filter @itemlife/api smoke:m4m5` | **家庭与综合看板离线冒烟**：创建 / 改名 / 三级权限 / 邀请 / 成员管理 / 事务删除 / 数据隔离 → 区间汇总 / 收支与总资产趋势 / 分类占比 / 物品投入，共 46 项断言 |
+| `pnpm --filter @itemlife/api smoke:site-admin` | **站点管理离线冒烟**：首位超级管理员 → 关闭/开放注册 → 单次邀请码 → 角色边界 → 停用即时失效与恢复，共 23 项断言 |
 | `make up` / `make dev` | 生产 / 开发容器编排（需 Docker 守护进程） |
 | `pnpm --filter @itemlife/api prisma:studio` | 可视化查看数据 |
 
@@ -327,6 +331,8 @@ modules/auth/
   上期对比、日/周/月趋势、分类占比和账户分布；前端“收支与总资产趋势”同时绘制三条曲线，并提供物品投入、近期流水和表格替代视图。
 - M4/M5 离线验收：`smoke:m4m5` 覆盖两账号加入家庭、邀请码失效、成员隔离、家庭/个人数据域、区间汇总、趋势、
   分类占比、账户余额与物品投入，以及家庭删改和管理员权限，共 46 项断言。
+- 已完成（站点管理）：首位注册者自动成为超级管理员；公开注册可关闭并改为 8 位单次邀请码；超级管理员可任免管理员，
+  超级管理员/管理员可停用和恢复普通用户。停用保留业务数据，并由全局鉴权守卫让现有访问令牌立即失效；`smoke:site-admin` 23 项全绿。
 - 前端未覆盖：结息**有计息天数**时的预览渲染（内存环境当天开户算不出天数，数值口径由 `smoke:ledger` 覆盖）；
   M4/M5 的正式浏览器多账号、多视口自动化仍归入 M6，当前由生产构建、响应式样式静态复核和离线 HTTP 冒烟保证。
 - 与设计报告的一处**有意偏差**：报告流程 A 写「注册后自动签发待开启 MFA 的会话」，实现改为**注册后跳登录页**

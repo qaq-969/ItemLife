@@ -60,6 +60,7 @@ pnpm --filter @itemlife/api smoke:auth     # 认证：注册 → 登录 → MFA 
 pnpm --filter @itemlife/api smoke:ledger   # 记账：分类 / 账户余额 / 转账 / 分摊 / 结息 等 66 项
 pnpm --filter @itemlife/api smoke:items    # 物品：成本 / 配件 / 流水联动删除 / 多级归属 等 82 项
 pnpm --filter @itemlife/api smoke:m4m5     # 家庭：三级权限/删改/隔离；看板：收支/总资产趋势/占比 等 46 项
+pnpm --filter @itemlife/api smoke:site-admin # 站点：首位超管/注册开关/邀请码/停用恢复 等 23 项
 ```
 
 只做前端联调时可以不起数据库，用内存替身跑后端（数据重启即清空）：

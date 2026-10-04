@@ -16,10 +16,23 @@ export function createInMemoryPrisma(): AnyDb {
         totpSecretEnc: null,
         totpConfirmedAt: null,
         lastTotpStep: null,
+        siteRole: 'user',
+        disabledAt: null,
         deletedAt: null,
         createdAt: now(),
         updatedAt: now(),
       }),
+    }),
+
+    siteSettings: createTable('siteSettings', {
+      defaults: () => ({ registrationOpen: true, updatedAt: now() }),
+    }),
+
+    siteInvite: createTable('siteInvite', {
+      defaults: () => ({ usedAt: null, revokedAt: null, createdAt: now() }),
+      relations: {
+        creator: (row, tables) => tables.user.rows.find((user: any) => same(user.id, row.createdBy)) ?? null,
+      },
     }),
 
     refreshToken: createTable('refreshToken', {
@@ -192,6 +205,8 @@ export function createInMemoryPrisma(): AnyDb {
       }),
     }),
   };
+
+  tables.siteSettings.insert({ id: 1 });
 
   return buildMemoryPrisma(tables);
 }

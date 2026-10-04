@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Length, MaxLength } from 'class-validator';
 import { PASSWORD_MIN_LENGTH } from '@itemlife/shared';
 
 export class RegisterDto {
@@ -19,6 +19,12 @@ export class RegisterDto {
   @IsString()
   @MaxLength(50)
   nickname?: string;
+
+  @ApiPropertyOptional({ description: '关闭公开注册时必填的 8 位单次邀请码', example: '7KMP9QRT' })
+  @IsOptional()
+  @IsString()
+  @Length(8, 8)
+  inviteCode?: string;
 }
 
 export class LoginDto {

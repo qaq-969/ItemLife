@@ -5,8 +5,38 @@ import type {
   InterestFreq,
   ItemStatus,
   HouseholdRole,
+  SiteRole,
   TransactionType,
 } from './constants';
+
+export interface SiteStatusDto {
+  registrationOpen: boolean;
+  initialized: boolean;
+}
+
+export interface SiteUserDto {
+  id: string;
+  email: string;
+  nickname: string | null;
+  siteRole: SiteRole;
+  disabledAt: string | null;
+  createdAt: string;
+}
+
+export interface SiteInviteDto {
+  id: string;
+  expiresAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+  createdByEmail: string;
+  code?: string;
+}
+
+export interface SiteAdminOverviewDto extends SiteStatusDto {
+  users: SiteUserDto[];
+  invites: SiteInviteDto[];
+}
 
 /** 数据归属：个人或某个家庭。 */
 export interface OwnerRef {

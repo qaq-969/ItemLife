@@ -4,6 +4,8 @@ import type { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import type { AuthenticatedRequest } from '../types/auth-user';
 import { TokenService } from '../../modules/auth/token.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { toIdBytes } from '../utils/id';
 
 /**
  * 全局登录守卫：默认所有端点都要求 Authorization: Bearer <access_token>，
@@ -14,6 +16,7 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly tokenService: TokenService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -32,6 +35,14 @@ export class JwtAuthGuard implements CanActivate {
     const payload = await this.tokenService.verifyAccessToken(token);
     if (!payload.mfa) {
       throw new UnauthorizedException({ code: 'MFA_NOT_COMPLETED', message: '该会话尚未完成两步验证' });
+    }
+
+    const userId = toIdBytes(payload.sub);
+    const user = userId
+      ? await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null, disabledAt: null }, select: { id: true } })
+      : null;
+    if (!user) {
+      throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: '登录状态已失效，请重新登录' });
     }
 
     request.user = { id: payload.sub, sessionId: payload.sid, mfa: payload.mfa };

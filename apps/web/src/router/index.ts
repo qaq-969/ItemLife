@@ -92,6 +92,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/SecurityView.vue'),
         meta: { title: '账号安全' },
       },
+      {
+        path: 'site-admin',
+        name: 'site-admin',
+        component: () => import('@/views/SiteAdminView.vue'),
+        meta: { title: '站点管理', siteAdmin: true },
+      },
     ],
   },
   {
@@ -120,6 +126,10 @@ router.beforeEach((to) => {
   }
 
   if (isPublic && auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
+    return { name: 'dashboard' };
+  }
+
+  if (to.meta.siteAdmin === true && !['super_admin', 'admin'].includes(auth.user?.siteRole ?? '')) {
     return { name: 'dashboard' };
   }
 

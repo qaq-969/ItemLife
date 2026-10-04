@@ -17,6 +17,14 @@ const auth = useAuthStore();
 
     <nav class="card divide-y divide-line">
       <RouterLink
+        v-if="auth.user?.siteRole === 'super_admin' || auth.user?.siteRole === 'admin'"
+        class="flex min-h-12 items-center justify-between px-5 text-sm font-medium hover:bg-slate-50"
+        :to="{ name: 'site-admin' }"
+      >
+        <span>站点管理</span>
+        <span class="text-ink-3">›</span>
+      </RouterLink>
+      <RouterLink
         class="flex min-h-12 items-center justify-between px-5 text-sm font-medium hover:bg-slate-50"
         :to="{ name: 'security' }"
       >

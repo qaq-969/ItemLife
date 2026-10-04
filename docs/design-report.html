@@ -842,7 +842,7 @@
         <thead><tr><th style="width:80px">方法</th><th style="width:290px">路径</th><th>说明</th><th style="width:120px">认证</th></tr></thead>
         <tbody>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">认证与 MFA（模块 Auth）</td></tr>
-          <tr><td>POST</td><td><code>/auth/register</code></td><td>注册：邮箱 + 密码，密码强度与泄露检查，Argon2id 入库</td><td>公开 · 限流</td></tr>
+          <tr><td>POST</td><td><code>/auth/register</code></td><td>注册：首位用户成为超级管理员；关闭公开注册后必须提交 8 位单次邀请码</td><td>公开 · 限流</td></tr>
           <tr><td>POST</td><td><code>/auth/login</code></td><td>第一步：校验密码 → 若已开 MFA 返回 <code>mfa_required</code> 短期票据</td><td>公开 · 限流</td></tr>
           <tr><td>POST</td><td><code>/auth/mfa/verify</code></td><td>第二步：校验 TOTP / 恢复码 → 签发正式令牌对</td><td>mfa 票据</td></tr>
           <tr><td>POST</td><td><code>/auth/mfa/setup</code></td><td>生成 TOTP 密钥 + otpauth 二维码（仅绑定前临时存于服务端）</td><td>JWT</td></tr>
@@ -851,6 +851,13 @@
           <tr><td>POST</td><td><code>/auth/token/refresh</code></td><td>刷新令牌旋转：旧令牌吊销，检测盗用则整族吊销</td><td>Cookie</td></tr>
           <tr><td>POST</td><td><code>/auth/logout</code> / <code>/auth/logout-all</code></td><td>登出当前设备 / 全部设备</td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/auth/sessions</code></td><td>登录设备列表（脱敏 UA/IP）与远程下线</td><td>JWT</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">站点管理（模块 SiteAdmin）</td></tr>
+          <tr><td>GET</td><td><code>/site/status</code></td><td>公开读取注册开关与站点是否已初始化</td><td>公开</td></tr>
+          <tr><td>GET</td><td><code>/site/admin</code></td><td>读取站点设置、用户与最近邀请码</td><td>JWT · 管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/registration</code></td><td>开启或关闭公开注册</td><td>JWT · 超级管理员</td></tr>
+          <tr><td>POST/DELETE</td><td><code>/site/admin/invites[/:id]</code></td><td>关闭注册时生成 7 天单次邀请码 / 撤销邀请码</td><td>JWT · 管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/users/:id/role</code></td><td>授予或移除站点管理员权限</td><td>JWT · 超级管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/users/:id/status</code></td><td>停用或恢复普通用户；停用保留数据并撤销会话</td><td>JWT · 管理员</td></tr>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">记账（模块 Ledger）</td></tr>
           <tr><td>GET/POST</td><td><code>/accounts</code></td><td>资产账户列表（含派生余额与计息配置）/ 新建</td><td>JWT</td></tr>
           <tr><td>PATCH/DELETE</td><td><code>/accounts/:id</code></td><td>编辑（含利息配置：年化利率、结息周期）/ 归档 / 删除（无流水时才可删）</td><td>JWT · 属主校验</td></tr>
@@ -1446,9 +1453,9 @@
     <ol>
       <li>目标机器安装 Docker Engine + Compose 插件（Windows / macOS 用 Docker Desktop，Linux 用发行版包）；</li>
       <li>复制 <code>.env.example → .env</code>，填写数据库口令、JWT 密钥、AES 密钥（脚本 <code>make gen-secrets</code> 可自动生成随机值）；</li>
-      <li><code>docker compose up -d --build</code> → 拉取基础镜像、构建 web/api、启动 4 个服务；</li>
+      <li>常规源码部署使用 <code>docker compose up -d --build</code>；NAS 交付包包含完整构建上下文，可在 NAS UI 中仅执行 <code>docker compose up -d</code>，首次启动会自动构建 web/api 并启动 4 个服务；</li>
       <li>api 容器 entrypoint：等待 MySQL 健康 → <code>prisma migrate deploy</code> 建表 → 启动服务（需写入预置分类时设 <code>SEED_ON_START=1</code>，生产建议保持 0）；</li>
-      <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，按引导开启 MFA。</li>
+      <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，该账号自动成为超级管理员，再按引导开启 MFA。</li>
     </ol>
 
     <h3>10.5 内网部署与外部反向代理对接 <span class="tag tag-info">已确认</span></h3>
