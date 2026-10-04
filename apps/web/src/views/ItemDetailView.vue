@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { formatMoney, type ItemDetailDto, type ItemStatus, type TransactionDto } from '@itemlife/shared';
 import { itemsApi } from '@/api/items';
 import { ApiError } from '@/api/http';
+import AppModal from '@/components/AppModal.vue';
 import { useDomainStore } from '@/stores/domain';
 import { init, use, type ECharts } from 'echarts/core';
 import { LineChart } from 'echarts/charts';
@@ -28,6 +29,8 @@ const loading = ref(true);
 const busy = ref(false);
 const errorText = ref<string | null>(null);
 const message = ref<string | null>(null);
+const deleteOpen = ref(false);
+const deleteReason = ref('');
 
 /** 每个批次行独立的消耗数量，默认 1 */
 const qty = reactive<Record<string, string>>({});
@@ -181,21 +184,34 @@ function removeAccessory(accessoryId: string, name: string): void {
   void guard(() => itemsApi.removeAccessory(accessoryId, { reason: reason.trim() }), '配件批次及关联记录已删除');
 }
 
-function removeItem(): void {
+function openRemoveItem(): void {
+  deleteReason.value = '';
+  errorText.value = null;
+  deleteOpen.value = true;
+}
+
+function closeRemoveItem(): void {
+  if (busy.value) return;
+  deleteOpen.value = false;
+  deleteReason.value = '';
+}
+
+async function removeItem(): Promise<void> {
   const item = detail.value;
   if (!item) return;
-  const reason = window.prompt(
-    `删除物品「${item.name}」会同步移除 ${item.transactions.length} 笔关联流水中的对应物品、配件和费用；共享流水会自动扣减金额，减为 0 时整笔删除。请填写原因：`,
-  );
-  if (!reason?.trim()) return;
-  void (async () => {
-    try {
-      await itemsApi.remove(item.id, { reason: reason.trim() });
-      await router.push({ name: 'items' });
-    } catch (error) {
-      errorText.value = error instanceof ApiError ? error.message : '删除失败，请重试';
-    }
-  })();
+  const reason = deleteReason.value.trim();
+  if (!reason) return;
+  busy.value = true;
+  errorText.value = null;
+  try {
+    await itemsApi.remove(item.id, { reason });
+    deleteOpen.value = false;
+    await router.push({ name: 'items' });
+  } catch (error) {
+    errorText.value = error instanceof ApiError ? error.message : '删除失败，请重试';
+  } finally {
+    busy.value = false;
+  }
 }
 
 const cost = computed(() => detail.value?.cost ?? null);
@@ -255,7 +271,7 @@ onBeforeUnmount(() => {
             <RouterLink :to="{ name: 'item-edit', params: { id: detail.id } }" class="btn btn-ghost min-h-9 px-3 text-xs">
               编辑
             </RouterLink>
-            <button type="button" class="btn btn-ghost min-h-9 px-3 text-xs text-danger" @click="removeItem">
+            <button type="button" class="btn btn-ghost min-h-9 px-3 text-xs text-danger" @click="openRemoveItem">
               删除
             </button>
           </div>
@@ -452,6 +468,33 @@ onBeforeUnmount(() => {
         </ul>
       </section>
     </template>
+
+    <AppModal :open="deleteOpen" title="删除物品及关联记录" @close="closeRemoveItem">
+      <p class="text-sm leading-6 text-ink-2">
+        删除“{{ detail?.name }}”后，系统会按金额归属同步处理物品与流水，此操作不能直接恢复。
+      </p>
+      <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-6 text-ink-2">
+        <li>移除该物品、配件库存，以及本体、配件和附加费用明细。</li>
+        <li>同步调整当前关联的 {{ detail?.transactions.length ?? 0 }} 笔流水；跨流水追加的明细也会一并移除。</li>
+        <li>共享流水只扣除属于该物品的金额；金额归零时才删除整笔流水，其他物品明细继续保留。</li>
+      </ul>
+      <label class="label mt-4 block" for="delete-item-reason">删除原因</label>
+      <textarea
+        id="delete-item-reason"
+        v-model="deleteReason"
+        class="field mt-1 min-h-20 w-full resize-y py-2"
+        maxlength="200"
+        placeholder="例如：重复录入、物品已处置"
+        autofocus
+      ></textarea>
+      <p v-if="errorText" class="form-error mt-3">{{ errorText }}</p>
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button type="button" class="btn btn-ghost" :disabled="busy" @click="closeRemoveItem">取消</button>
+        <button type="button" class="btn bg-danger text-white" :disabled="busy || !deleteReason.trim()" @click="removeItem">
+          {{ busy ? '正在删除…' : '确认删除' }}
+        </button>
+      </div>
+    </AppModal>
 
   </section>
 </template>
