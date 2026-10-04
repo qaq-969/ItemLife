@@ -1126,11 +1126,11 @@
       <table>
         <thead><tr><th style="width:150px">指标</th><th style="width:270px">定义</th><th>可视化</th></tr></thead>
         <tbody>
-          <tr><td>支出</td><td>区间内 <code>type=expense</code> 求和</td><td>“收支与总资产趋势”左轴折线（日 / 周 / 月粒度）</td></tr>
-          <tr><td>收入</td><td>区间内 <code>type=income</code> 求和</td><td>“收支与总资产趋势”左轴折线（日 / 周 / 月粒度）</td></tr>
+          <tr><td>支出</td><td>区间内 <code>type=expense</code> 求和</td><td>“收支与总资产趋势”统一金额轴折线（日 / 周 / 月粒度）</td></tr>
+          <tr><td>收入</td><td>区间内 <code>type=income</code> 求和</td><td>“收支与总资产趋势”统一金额轴折线（日 / 周 / 月粒度）</td></tr>
           <tr><td>储蓄额度</td><td>区间内 收入 − 支出（净结余）</td><td>面积折线 + 目标线；按月对比柱状</td></tr>
           <tr><td>收益</td><td>分类带 <code>system_tag=investment_return</code> 的收入 + 自动结息流水（<code>system_tag=interest</code>，见 8.5）合计</td><td>独立折线 + 累计收益曲线</td></tr>
-          <tr><td>总资产</td><td>Σ 全部账户余额（沿流水按时间回溯）</td><td>“收支与总资产趋势”右轴折线，避免资产存量压缩收支曲线</td></tr>
+          <tr><td>总资产</td><td>Σ 全部账户余额（沿流水按时间回溯）</td><td>与收入、支出共用统一金额轴的折线</td></tr>
           <tr><td>分类占比</td><td>区间内按分类聚合</td><td>环形图 + Top10 排行</td></tr>
           <tr><td>同比 / 环比</td><td>与上一周期对比</td><td>涨跌徽章 + 差值标注</td></tr>
         </tbody>

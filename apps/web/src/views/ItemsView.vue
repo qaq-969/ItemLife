@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router';
 import { ITEM_STATUSES, formatMoney, type ItemDto, type ItemStatus, type ItemsOverviewDto } from '@itemlife/shared';
 import { itemsApi, type ItemQuery } from '@/api/items';
 import { ApiError } from '@/api/http';
+import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import { useDomainStore } from '@/stores/domain';
 
@@ -23,6 +24,9 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const errorText = ref<string | null>(null);
 const message = ref<string | null>(null);
+const deleting = ref(false);
+const deleteTarget = ref<ItemDto | null>(null);
+const deleteReason = ref('');
 
 const filters = ref<{ status: ItemStatus | ''; keyword: string }>({ status: '', keyword: '' });
 
@@ -71,16 +75,34 @@ function showMessage(text: string): void {
   }, 3_000);
 }
 
-async function remove(item: ItemDto): Promise<void> {
-  const reason = window.prompt(`撤销物品「${item.name}」会保留历史流水。请填写原因：`);
-  if (!reason?.trim()) return;
+function openRemove(item: ItemDto): void {
+  deleteTarget.value = item;
+  deleteReason.value = '';
+  errorText.value = null;
+}
+
+function closeRemove(): void {
+  if (deleting.value) return;
+  deleteTarget.value = null;
+  deleteReason.value = '';
+}
+
+async function remove(): Promise<void> {
+  const item = deleteTarget.value;
+  const reason = deleteReason.value.trim();
+  if (!item || !reason) return;
+  deleting.value = true;
   errorText.value = null;
   try {
-    await itemsApi.remove(item.id, { reason: reason.trim() });
-    showMessage('已生成物品撤销记录');
+    await itemsApi.remove(item.id, { reason });
+    deleteTarget.value = null;
+    deleteReason.value = '';
+    showMessage('物品及关联记录已删除');
     await reload();
   } catch (error) {
     errorText.value = error instanceof ApiError ? error.message : '删除失败，请重试';
+  } finally {
+    deleting.value = false;
   }
 }
 
@@ -224,7 +246,7 @@ onMounted(() => {
           >
             编辑
           </RouterLink>
-          <button type="button" class="btn btn-ghost min-h-9 px-3 text-xs text-danger" @click="remove(item)">
+          <button type="button" class="btn btn-ghost min-h-9 px-3 text-xs text-danger" @click="openRemove(item)">
             删除
           </button>
         </div>
@@ -236,5 +258,32 @@ onMounted(() => {
         {{ loadingMore ? '加载中…' : `加载更多（共 ${total} 件）` }}
       </button>
     </div>
+
+    <AppModal :open="deleteTarget !== null" title="删除物品及关联记录" @close="closeRemove">
+      <p class="text-sm leading-6 text-ink-2">
+        删除“{{ deleteTarget?.name }}”后，系统会按金额归属同步处理物品与流水，此操作不能直接恢复。
+      </p>
+      <ul class="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-6 text-ink-2">
+        <li>移除该物品、配件库存，以及本体、配件和附加费用明细。</li>
+        <li>跨流水追加的明细会从对应流水中一并移除。</li>
+        <li>共享流水只扣除属于该物品的金额；金额归零时才删除整笔流水，其他物品明细继续保留。</li>
+      </ul>
+      <label class="label mt-4 block" for="delete-list-item-reason">删除原因</label>
+      <textarea
+        id="delete-list-item-reason"
+        v-model="deleteReason"
+        class="field mt-1 min-h-20 w-full resize-y py-2"
+        maxlength="200"
+        placeholder="例如：重复录入、物品已处置"
+        autofocus
+      ></textarea>
+      <p v-if="errorText" class="form-error mt-3">{{ errorText }}</p>
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button type="button" class="btn btn-ghost" :disabled="deleting" @click="closeRemove">取消</button>
+        <button type="button" class="btn bg-danger text-white" :disabled="deleting || !deleteReason.trim()" @click="remove">
+          {{ deleting ? '正在删除…' : '确认删除' }}
+        </button>
+      </div>
+    </AppModal>
   </section>
 </template>

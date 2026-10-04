@@ -81,18 +81,15 @@ async function renderCharts(): Promise<void> {
     trendChart.setOption({
       animationDuration: 240,
       color: ['#059669', '#ef4444', '#4f46e5'],
-      grid: { left: 8, right: 8, top: 34, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 12, top: 34, bottom: 8, containLabel: true },
       tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMoney(Math.round(Number(value) * 100)) },
       legend: { top: 0, data: ['收入', '支出', '总资产'] },
       xAxis: { type: 'category', boundaryGap: false, data: points.map((row) => row.period), axisLabel: { hideOverlap: true } },
-      yAxis: [
-        { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
-        { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { show: false } },
-      ],
+      yAxis: { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
       series: [
         { name: '收入', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.incomeMinor / 100) },
         { name: '支出', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.expenseMinor / 100) },
-        { name: '总资产', type: 'line', smooth: true, symbolSize: 6, yAxisIndex: 1, data: points.map((row) => row.netWorthMinor / 100) },
+        { name: '总资产', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.netWorthMinor / 100) },
       ],
     }, true);
   }
