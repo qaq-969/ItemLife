@@ -60,3 +60,6 @@ RUN pnpm --filter @itemlife/shared build \
 
 EXPOSE 3000
 CMD ["pnpm", "--filter", "@itemlife/api", "start:dev"]
+
+# 默认 docker build 产出生产镜像；开发环境由 Compose 显式选择 dev 阶段。
+FROM runner AS production
