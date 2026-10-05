@@ -8,6 +8,7 @@ import { ApiError } from '@/api/http';
 import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import AllocationTreeNode from '@/components/AllocationTreeNode.vue';
+import MoneyInput from '@/components/MoneyInput.vue';
 import { useLedgerStore } from '@/stores/ledger';
 import { useDomainStore } from '@/stores/domain';
 
@@ -32,7 +33,7 @@ function nowLocal(): string { const date = new Date(); const pad = (value: numbe
 function parseYuan(value: string): number | null { if (!value.trim()) return null; try { return toMinor(value); } catch { return null; } }
 /** DTO 临时键上限为 32 字符；预留 item- 前缀后仍保持足够的随机性。 */
 function newKey(): string { return crypto.randomUUID().replace(/-/g, '').slice(0, 20); }
-function makeRow(parentKey: string | null, role: ItemRole): AllocationRow { return { key: newKey(), parentKey, role, itemId: '', name: '', amountYuan: '', qty: '1', lifespanDays: '' }; }
+function makeRow(parentKey: string | null, role: ItemRole): AllocationRow { return { key: newKey(), parentKey, role, itemId: '', name: '', amountYuan: '', qty: '', lifespanDays: '' }; }
 
 const amountMinor = computed(() => parseYuan(form.amountYuan));
 const transactionType = computed(() => form.entry === 'transfer' ? 'transfer_out' as const : form.entry as 'expense' | 'income');
@@ -92,7 +93,7 @@ onMounted(async () => { await ledger.refresh().catch(() => undefined); form.acco
       </div>
       <Transition name="entry" mode="out-in">
         <div :key="form.entry">
-          <div class="mt-4"><label class="label">金额（元）</label><input v-model="form.amountYuan" class="field text-xl font-semibold tabular-nums" inputmode="decimal" placeholder="0.00" /></div>
+          <div class="mt-4"><label class="label">金额（元）</label><MoneyInput v-model="form.amountYuan" input-class="text-xl font-semibold tabular-nums" placeholder="0.00" /></div>
           <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div><label class="label">{{ form.entry === 'transfer' ? '转出账户' : '账户' }}</label><AppSelect v-model="form.accountId" :options="accountOptions" /></div>
             <div v-if="form.entry === 'transfer'"><label class="label">转入账户</label><AppSelect v-model="form.toAccountId" :options="transferOptions" /></div>

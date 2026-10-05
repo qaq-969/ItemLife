@@ -11,6 +11,7 @@ const data = ref<SiteAdminOverviewDto | null>(null);
 const busy = ref(false);
 const errorMessage = ref('');
 const newInviteCode = ref('');
+const inviteRemark = ref('');
 const copyNotice = ref('');
 const pending = ref<null | { title: string; body: string; run: () => Promise<void> }>(null);
 
@@ -41,8 +42,9 @@ async function createInvite(): Promise<void> {
   errorMessage.value = '';
   copyNotice.value = '';
   try {
-    const invite = await siteAdminApi.createInvite();
+    const invite = await siteAdminApi.createInvite(inviteRemark.value);
     newInviteCode.value = invite.code ?? '';
+    inviteRemark.value = '';
     await load();
   } catch (error) { errorMessage.value = toApiError(error).message; }
   finally { busy.value = false; }
@@ -153,7 +155,10 @@ onMounted(() => { void load(); });
           <h2 class="font-semibold">注册邀请码</h2>
           <p class="mt-1 text-xs text-ink-3">单次使用，生成后 7 天内有效</p>
         </div>
-        <button type="button" class="btn btn-primary" :disabled="busy" @click="createInvite">生成邀请码</button>
+        <div class="flex w-full gap-2 sm:w-auto">
+          <input v-model="inviteRemark" class="field min-w-0 sm:w-64" maxlength="100" placeholder="备注（仅管理员可见）" aria-label="邀请码备注" />
+          <button type="button" class="btn btn-primary shrink-0" :disabled="busy" @click="createInvite">生成邀请码</button>
+        </div>
       </div>
 
       <div v-if="newInviteCode" class="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-brand/25 bg-brand-soft p-3">
@@ -166,6 +171,7 @@ onMounted(() => { void load(); });
       <div class="mt-4 space-y-2">
         <div v-for="invite in data.invites" :key="invite.id" class="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-line px-3 py-2.5 text-sm">
           <span class="font-semibold" :class="inviteState(invite) === '可使用' ? 'text-ok' : 'text-ink-3'">{{ inviteState(invite) }}</span>
+          <span v-if="invite.remark" class="max-w-full truncate rounded bg-slate-100 px-2 py-1 text-xs text-ink-2" :title="invite.remark">备注：{{ invite.remark }}</span>
           <span class="text-ink-3">创建者 {{ invite.createdByEmail }}</span>
           <span class="text-ink-3">失效 {{ dateTime(invite.expiresAt) }}</span>
           <button v-if="inviteState(invite) === '可使用'" type="button" class="ml-auto text-sm font-semibold text-danger" @click="confirmRevoke(invite)">撤销</button>
@@ -182,7 +188,10 @@ onMounted(() => { void load(); });
       <div class="divide-y divide-line">
         <article v-for="user in data.users" :key="user.id" class="flex flex-wrap items-center gap-3 px-5 py-4">
           <div class="min-w-0 flex-1 basis-56">
-            <p class="truncate text-sm font-semibold">{{ user.nickname || user.email }}</p>
+            <p class="flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <span class="truncate">{{ user.nickname || user.email }}</span>
+              <span v-if="user.inviteRemark" class="max-w-48 shrink truncate rounded bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700" :title="user.inviteRemark">备注：{{ user.inviteRemark }}</span>
+            </p>
             <p class="truncate text-xs text-ink-3">{{ user.email }} · {{ dateTime(user.createdAt) }}</p>
           </div>
           <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="user.siteRole === 'super_admin' ? 'bg-brand-soft text-brand' : 'bg-slate-100 text-ink-2'">

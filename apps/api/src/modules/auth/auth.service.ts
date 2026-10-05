@@ -5,7 +5,7 @@ import { AuditService } from '../../common/audit/audit.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { seedPresetCategories } from '../categories/category-presets';
-import { bytesToUuid, newId, toIdBytes } from '../../common/utils/id';
+import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
 import { maskEmail } from '../../common/utils/mask';
 import type { LoginDto, RegisterDto } from './dto/auth.dto';
 import { AuthSessionVo, AuthUserVo, LoginResultVo, MfaEnableVo, MfaSetupVo } from './dto/auth.vo';
@@ -62,6 +62,7 @@ export class AuthService {
       });
 
       const userCount = await tx.user.count({ where: { deletedAt: null } });
+      let inviteToClaim: { id: IdBytes; usedAt: Date } | null = null;
       if (userCount > 0 && !settings.registrationOpen) {
         const codeHash = this.crypto.sha256Hex(dto.inviteCode?.trim().toUpperCase() ?? '');
         const invite = dto.inviteCode
@@ -71,11 +72,7 @@ export class AuthService {
         if (!invite || invite.usedAt || invite.revokedAt || invite.expiresAt <= now) {
           throw invalidInvite();
         }
-        const claimed = await tx.siteInvite.updateMany({
-          where: { id: invite.id, usedAt: null, revokedAt: null, expiresAt: { gt: now } },
-          data: { usedAt: now },
-        });
-        if (claimed.count !== 1) throw invalidInvite();
+        inviteToClaim = { id: invite.id, usedAt: now };
       }
 
       const created = await tx.user.create({
@@ -87,6 +84,13 @@ export class AuthService {
           siteRole: userCount === 0 ? 'super_admin' : 'user',
         },
       });
+      if (inviteToClaim) {
+        const claimed = await tx.siteInvite.updateMany({
+          where: { id: inviteToClaim.id, usedAt: null, revokedAt: null, expiresAt: { gt: inviteToClaim.usedAt } },
+          data: { usedAt: inviteToClaim.usedAt, usedBy: created.id },
+        });
+        if (claimed.count !== 1) throw invalidInvite();
+      }
       // 预置分类随注册一次性复制到个人数据域（设计报告 5.2 ⑦），失败则整体回滚
       await seedPresetCategories(tx, { ownerType: 'user', ownerId: created.id });
       return created;

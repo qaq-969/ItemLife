@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsIn } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+
+export class CreateSiteInviteDto {
+  @ApiProperty({ required: false, maxLength: 100, description: '仅站点管理员可见的邀请备注' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  remark?: string;
+}
 
 export class UpdateRegistrationDto {
   @ApiProperty()

@@ -75,9 +75,9 @@ async function main(): Promise<void> {
   check('超级管理员可关闭公开注册', closed.status === 200 && closed.body?.data?.registrationOpen === false, JSON.stringify(closed.body));
   const denied = await register('denied@itemlife.local');
   check('关闭后无邀请码注册被拒', denied.status === 403 && denied.body?.code === 'SITE_INVITE_INVALID', JSON.stringify(denied.body));
-  const created = await request('POST', '/site/admin/invites', { token: ownerToken });
+  const created = await request('POST', '/site/admin/invites', { token: ownerToken, body: { remark: '牙刷群用户' } });
   const inviteCode = created.body?.data?.code as string;
-  check('管理员生成 8 位邀请码', created.status === 201 && /^[2-9A-HJ-NP-Z]{8}$/.test(inviteCode), JSON.stringify(created.body));
+  check('管理员生成带备注的 8 位邀请码', created.status === 201 && /^[2-9A-HJ-NP-Z]{8}$/.test(inviteCode) && created.body?.data?.remark === '牙刷群用户', JSON.stringify(created.body));
   const invited = await register('member@itemlife.local', inviteCode);
   check('有效邀请码可注册一次', invited.status === 201 && invited.body?.data?.siteRole === 'user', JSON.stringify(invited.body));
   const reused = await register('reused@itemlife.local', inviteCode);
@@ -88,11 +88,12 @@ async function main(): Promise<void> {
   const adminUser = overview.body?.data?.users?.find((user: any) => user.email === 'admin@itemlife.local');
   const memberUser = overview.body?.data?.users?.find((user: any) => user.email === 'member@itemlife.local');
   check('管理页列出站点用户', overview.status === 200 && adminUser && memberUser, JSON.stringify(overview.body));
+  check('邀请码备注仅随管理页用户信息返回', memberUser?.inviteRemark === '牙刷群用户', JSON.stringify(memberUser));
   const promoted = await request('PATCH', `/site/admin/users/${adminUser?.id}/role`, { token: ownerToken, body: { role: 'admin' } });
   check('超级管理员可授予管理员权限', promoted.status === 200 && promoted.body?.data?.siteRole === 'admin', JSON.stringify(promoted.body));
   const adminLogin = await login('admin@itemlife.local');
   const adminToken = tokenOf(adminLogin);
-  const adminInvite = await request('POST', '/site/admin/invites', { token: adminToken });
+  const adminInvite = await request('POST', '/site/admin/invites', { token: adminToken, body: {} });
   check('管理员可在关闭注册时生成邀请码', adminInvite.status === 201 && typeof adminInvite.body?.data?.code === 'string', JSON.stringify(adminInvite.body));
   const forbiddenToggle = await request('PATCH', '/site/admin/registration', { token: adminToken, body: { registrationOpen: true } });
   check('普通管理员不能修改注册开关', forbiddenToggle.status === 403 && forbiddenToggle.body?.code === 'SUPER_ADMIN_REQUIRED', JSON.stringify(forbiddenToggle.body));
@@ -119,7 +120,7 @@ async function main(): Promise<void> {
   console.log('\n[5] 重新开放注册');
   const opened = await request('PATCH', '/site/admin/registration', { token: ownerToken, body: { registrationOpen: true } });
   check('超级管理员可重新开放注册', opened.status === 200 && opened.body?.data?.registrationOpen === true, JSON.stringify(opened.body));
-  const needlessInvite = await request('POST', '/site/admin/invites', { token: ownerToken });
+  const needlessInvite = await request('POST', '/site/admin/invites', { token: ownerToken, body: {} });
   check('公开注册时不生成邀请码', needlessInvite.status === 409 && needlessInvite.body?.code === 'REGISTRATION_IS_OPEN', JSON.stringify(needlessInvite.body));
   const publicUser = await register('public@itemlife.local');
   check('开放后无需邀请码即可注册', publicUser.status === 201, JSON.stringify(publicUser.body));

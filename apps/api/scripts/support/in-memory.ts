@@ -22,6 +22,9 @@ export function createInMemoryPrisma(): AnyDb {
         createdAt: now(),
         updatedAt: now(),
       }),
+      relations: {
+        registrationInvite: (row, tables) => tables.siteInvite.rows.find((invite: any) => same(invite.usedBy, row.id)) ?? null,
+      },
     }),
 
     siteSettings: createTable('siteSettings', {
@@ -29,7 +32,7 @@ export function createInMemoryPrisma(): AnyDb {
     }),
 
     siteInvite: createTable('siteInvite', {
-      defaults: () => ({ usedAt: null, revokedAt: null, createdAt: now() }),
+      defaults: () => ({ remark: null, usedAt: null, usedBy: null, revokedAt: null, createdAt: now() }),
       relations: {
         creator: (row, tables) => tables.user.rows.find((user: any) => same(user.id, row.createdBy)) ?? null,
       },

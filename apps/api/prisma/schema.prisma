@@ -107,6 +107,7 @@ model User {
   accessoryUsages     AccessoryUsage[]
   inventoryReverts   InventoryRevert[]
   createdSiteInvites SiteInvite[]      @relation("SiteInviteCreator")
+  registrationInvite SiteInvite?       @relation("SiteInviteUser")
 
   @@map("users")
 }
@@ -122,13 +123,16 @@ model SiteSettings {
 model SiteInvite {
   id        Bytes     @id @db.Binary(16)
   codeHash  String    @unique @map("code_hash") @db.Char(64)
+  remark    String?   @db.VarChar(100)
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
+  usedBy    Bytes?    @unique @map("used_by") @db.Binary(16)
   revokedAt DateTime? @map("revoked_at")
   createdBy Bytes     @map("created_by") @db.Binary(16)
   createdAt DateTime  @default(now()) @map("created_at")
 
-  creator User @relation("SiteInviteCreator", fields: [createdBy], references: [id])
+  creator  User  @relation("SiteInviteCreator", fields: [createdBy], references: [id])
+  usedUser User? @relation("SiteInviteUser", fields: [usedBy], references: [id], onDelete: SetNull)
 
   @@index([createdBy])
   @@index([expiresAt])

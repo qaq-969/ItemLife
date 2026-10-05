@@ -8,6 +8,7 @@ import { useLedgerStore } from '@/stores/ledger';
 import { useDomainStore } from '@/stores/domain';
 import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import MoneyInput from '@/components/MoneyInput.vue';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
   in_use: '在役',
@@ -54,7 +55,7 @@ const categoryOptions = computed(() =>
 );
 
 function addBatch(): void {
-  batches.value = [...batches.value, { name: '', unitYuan: '', totalQty: '1', usedQty: '0' }];
+  batches.value = [...batches.value, { name: '', unitYuan: '', totalQty: '', usedQty: '0' }];
 }
 
 function removeBatch(index: number): void {
@@ -210,11 +211,10 @@ onMounted(async () => {
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="label" for="item-price">本体价（元）</label>
-          <input
+          <MoneyInput
             id="item-price"
             v-model="form.priceYuan"
-            class="field tabular-nums"
-            inputmode="decimal"
+            input-class="tabular-nums"
             placeholder="400.00"
             :disabled="priceFromLedger"
           />
@@ -269,7 +269,7 @@ onMounted(async () => {
         <div v-if="batches.length === 0" class="mt-3 text-xs text-ink-3">暂未添加配件。</div>
         <div v-for="(row, index) in batches" :key="index" class="mt-3 grid gap-2 sm:grid-cols-[1.4fr_1fr_0.7fr_0.7fr_auto]">
           <input v-model="row.name" class="field" placeholder="替换刷头" maxlength="60" />
-          <input v-model="row.unitYuan" class="field tabular-nums" inputmode="decimal" placeholder="单价 20.00" />
+          <MoneyInput v-model="row.unitYuan" input-class="tabular-nums" placeholder="单价 20.00" />
           <input v-model="row.totalQty" class="field tabular-nums" inputmode="numeric" placeholder="总数 12" />
           <input v-model="row.usedQty" class="field tabular-nums" inputmode="numeric" placeholder="已用 2" />
           <button

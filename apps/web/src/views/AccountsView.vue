@@ -17,6 +17,7 @@ import { useLedgerStore } from '@/stores/ledger';
 import { useDomainStore } from '@/stores/domain';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import MoneyInput from '@/components/MoneyInput.vue';
 
 const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   cash: '现金',
@@ -290,7 +291,7 @@ onMounted(() => {
 
         <div v-if="!editingId">
           <label class="label" for="account-initial">初始余额（元）</label>
-          <input id="account-initial" v-model="form.initialYuan" class="field" inputmode="decimal" placeholder="0.00" />
+          <MoneyInput id="account-initial" v-model="form.initialYuan" placeholder="0.00" />
           <p class="mt-1 text-xs text-ink-3">应付款可填负数，如 -1200.00。</p>
         </div>
 

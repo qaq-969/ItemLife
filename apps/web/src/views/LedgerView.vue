@@ -9,6 +9,7 @@ import { useDomainStore } from '@/stores/domain';
 import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import MoneyInput from '@/components/MoneyInput.vue';
 import { useCachedPage } from '@/utils/cached-page';
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', transfer_in: '转入', transfer_out: '转出' };
@@ -421,7 +422,7 @@ useCachedPage({
 
         <div>
           <label class="label" for="edit-amount">金额（元）</label>
-          <input id="edit-amount" v-model="editForm.amountYuan" class="field" inputmode="decimal" />
+          <MoneyInput id="edit-amount" v-model="editForm.amountYuan" />
         </div>
 
         <div v-if="!editing?.transferGroupId">
@@ -457,10 +458,9 @@ useCachedPage({
               <div class="grid grid-cols-[auto_minmax(0,1fr)_7rem] items-center gap-2">
                 <span class="rounded bg-brand-soft px-2 py-1 text-xs font-medium text-brand">{{ ROLE_LABELS[row.role] }}</span>
                 <input v-model="row.name" class="field min-w-0" maxlength="100" :disabled="Boolean(row.itemDeletedAt)" aria-label="明细名称" />
-                <input
+                <MoneyInput
                   v-model="row.amountYuan"
-                  class="field text-right tabular-nums"
-                  inputmode="decimal"
+                  input-class="text-right tabular-nums"
                   :disabled="row.role === 'link' || (row.role === 'accessory' && ((row.usedQty ?? 0) > 0 || (row.revertedQty ?? 0) > 0))"
                   :placeholder="row.role === 'link' ? '仅关联' : '金额'"
                   aria-label="明细金额"

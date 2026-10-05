@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AppSelect from '@/components/AppSelect.vue';
+import MoneyInput from '@/components/MoneyInput.vue';
 
 defineOptions({ name: 'AllocationTreeNode' });
 
@@ -22,7 +23,7 @@ const roleLabel = computed(() => ({ body: '新建物品', link: '关联物品', 
         <AppSelect v-if="row.role === 'link'" v-model="row.itemId" :options="itemOptions" class="col-span-12 sm:min-w-0 sm:flex-1" />
         <template v-else>
           <input v-model="row.name" class="field col-span-7 min-w-0 sm:flex-1" :placeholder="row.role === 'body' ? '物品名称' : row.role === 'accessory' ? '附加物品名称' : '附加费用名称'" />
-          <input v-model="row.amountYuan" class="field col-span-5 text-right tabular-nums sm:w-28 sm:flex-none" inputmode="decimal" :placeholder="row.role === 'body' ? '本体金额' : '金额'" />
+          <MoneyInput v-model="row.amountYuan" wrapper-class="col-span-5 sm:w-28 sm:flex-none" input-class="text-right tabular-nums" :placeholder="row.role === 'body' ? '本体金额' : '金额'" />
         </template>
         <div class="col-span-12 grid items-center gap-2 sm:contents" :class="row.role === 'link' ? 'grid-cols-[minmax(0,1fr)_repeat(2,3.25rem)]' : 'grid-cols-[minmax(0,1fr)_repeat(3,3.25rem)]'">
           <input v-if="row.role === 'body'" v-model="row.lifespanDays" class="field min-w-0 text-sm sm:w-44 sm:flex-none" inputmode="numeric" placeholder="预期寿命（天，可选）" />

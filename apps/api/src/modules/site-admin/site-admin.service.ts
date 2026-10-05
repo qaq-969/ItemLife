@@ -29,7 +29,7 @@ export class SiteAdminService {
     await this.requireManager(userId);
     const [status, users, invites] = await Promise.all([
       this.status(),
-      this.prisma.user.findMany({ where: { deletedAt: null }, orderBy: [{ createdAt: 'asc' }, { email: 'asc' }] }),
+      this.prisma.user.findMany({ where: { deletedAt: null }, include: { registrationInvite: { select: { remark: true } } }, orderBy: [{ createdAt: 'asc' }, { email: 'asc' }] }),
       this.prisma.siteInvite.findMany({ include: { creator: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
     ]);
     return {
@@ -46,7 +46,7 @@ export class SiteAdminService {
     return this.status();
   }
 
-  async createInvite(userId: string): Promise<SiteInviteDto> {
+  async createInvite(userId: string, remark?: string): Promise<SiteInviteDto> {
     const actor = await this.requireManager(userId);
     const settings = await this.prisma.siteSettings.findUnique({ where: { id: 1 } });
     if (settings?.registrationOpen ?? true) {
@@ -57,6 +57,7 @@ export class SiteAdminService {
       data: {
         id: newId(),
         codeHash: this.crypto.sha256Hex(code),
+        remark: remark?.trim() || null,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
         createdBy: actor.id,
       },
@@ -137,16 +138,17 @@ export class SiteAdminService {
     return user;
   }
 
-  private userVo(row: { id: IdBytes; email: string; nickname: string | null; siteRole: 'super_admin' | 'admin' | 'user'; disabledAt: Date | null; createdAt: Date }): SiteUserDto {
+  private userVo(row: { id: IdBytes; email: string; nickname: string | null; siteRole: 'super_admin' | 'admin' | 'user'; disabledAt: Date | null; createdAt: Date; registrationInvite?: { remark: string | null } | null }): SiteUserDto {
     return {
       id: bytesToUuid(row.id), email: row.email, nickname: row.nickname, siteRole: row.siteRole,
+      inviteRemark: row.registrationInvite?.remark ?? null,
       disabledAt: row.disabledAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(),
     };
   }
 
-  private inviteVo(row: { id: IdBytes; expiresAt: Date; usedAt: Date | null; revokedAt: Date | null; createdAt: Date; creator: { email: string } }): SiteInviteDto {
+  private inviteVo(row: { id: IdBytes; remark: string | null; expiresAt: Date; usedAt: Date | null; revokedAt: Date | null; createdAt: Date; creator: { email: string } }): SiteInviteDto {
     return {
-      id: bytesToUuid(row.id), expiresAt: row.expiresAt.toISOString(), usedAt: row.usedAt?.toISOString() ?? null,
+      id: bytesToUuid(row.id), remark: row.remark, expiresAt: row.expiresAt.toISOString(), usedAt: row.usedAt?.toISOString() ?? null,
       revokedAt: row.revokedAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(), createdByEmail: row.creator.email,
     };
   }

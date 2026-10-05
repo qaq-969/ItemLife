@@ -18,6 +18,7 @@ export interface SiteUserDto {
   id: string;
   email: string;
   nickname: string | null;
+  inviteRemark: string | null;
   siteRole: SiteRole;
   disabledAt: string | null;
   createdAt: string;
@@ -25,6 +26,7 @@ export interface SiteUserDto {
 
 export interface SiteInviteDto {
   id: string;
+  remark: string | null;
   expiresAt: string;
   usedAt: string | null;
   revokedAt: string | null;

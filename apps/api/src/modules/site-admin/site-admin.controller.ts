@@ -4,7 +4,7 @@ import type { SiteAdminOverviewDto, SiteInviteDto, SiteStatusDto, SiteUserDto } 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-user';
-import { UpdateRegistrationDto, UpdateSiteRoleDto, UpdateSiteUserStatusDto } from './dto/site-admin.dto';
+import { CreateSiteInviteDto, UpdateRegistrationDto, UpdateSiteRoleDto, UpdateSiteUserStatusDto } from './dto/site-admin.dto';
 import { SiteAdminService } from './site-admin.service';
 
 @ApiTags('站点管理')
@@ -36,8 +36,8 @@ export class SiteAdminController {
   @ApiBearerAuth()
   @Post('admin/invites')
   @ApiOperation({ summary: '管理员在关闭公开注册时生成 7 天单次邀请码' })
-  createInvite(@CurrentUser() user: AuthenticatedUser): Promise<SiteInviteDto> {
-    return this.site.createInvite(user.id);
+  createInvite(@CurrentUser() user: AuthenticatedUser, @Body() dto?: CreateSiteInviteDto): Promise<SiteInviteDto> {
+    return this.site.createInvite(user.id, dto?.remark);
   }
 
   @ApiBearerAuth()
