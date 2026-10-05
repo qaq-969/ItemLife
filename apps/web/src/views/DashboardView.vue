@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { formatMoney, type DashboardBreakdownDto, type DashboardGranularity, type DashboardOverviewDto, type DashboardTrendDto, type TransactionDto } from '@itemlife/shared';
-import type { ECharts } from 'echarts';
+import type { ECharts } from 'echarts/core';
 import { dashboardApi } from '@/api/dashboard';
 import { transactionsApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
@@ -21,9 +21,12 @@ const loading = ref(false);
 const errorText = ref<string | null>(null);
 const trendEl = ref<HTMLDivElement | null>(null);
 const categoryEl = ref<HTMLDivElement | null>(null);
+const chartsReady = ref(false);
+const chartError = ref<string | null>(null);
 let trendChart: ECharts | null = null;
 let categoryChart: ECharts | null = null;
 let chartResizeObserver: ResizeObserver | null = null;
+let chartLibrary: Promise<typeof import('@/utils/dashboard-charts')> | null = null;
 
 const periodOptions = [
   { value: 'month', label: '本月' },
@@ -76,43 +79,53 @@ async function load(): Promise<void> {
 }
 
 async function renderCharts(): Promise<void> {
-  const echarts = await import('echarts');
-  if (trendEl.value) {
-    if (trendChart && trendChart.getDom() !== trendEl.value) {
-      trendChart.dispose();
-      trendChart = null;
+  chartError.value = null;
+  try {
+    chartLibrary ??= import('@/utils/dashboard-charts').catch((error) => {
+      chartLibrary = null;
+      throw error;
+    });
+    const { init } = await chartLibrary;
+    if (trendEl.value) {
+      if (trendChart && trendChart.getDom() !== trendEl.value) {
+        trendChart.dispose();
+        trendChart = null;
+      }
+      trendChart ??= init(trendEl.value);
+      const points = trend.value?.points ?? [];
+      trendChart.setOption({
+        animationDuration: 240,
+        color: ['#059669', '#ef4444', '#4f46e5'],
+        grid: { left: 8, right: 12, top: 34, bottom: 8, containLabel: true },
+        tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMoney(Math.round(Number(value) * 100)) },
+        legend: { top: 0, data: ['收入', '支出', '总资产'] },
+        xAxis: { type: 'category', boundaryGap: false, data: points.map((row) => row.period), axisLabel: { hideOverlap: true } },
+        yAxis: { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
+        series: [
+          { name: '收入', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.incomeMinor / 100) },
+          { name: '支出', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.expenseMinor / 100) },
+          { name: '总资产', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.netWorthMinor / 100) },
+        ],
+      }, true);
+      trendChart.resize();
     }
-    trendChart ??= echarts.init(trendEl.value);
-    const points = trend.value?.points ?? [];
-    trendChart.setOption({
-      animationDuration: 240,
-      color: ['#059669', '#ef4444', '#4f46e5'],
-      grid: { left: 8, right: 12, top: 34, bottom: 8, containLabel: true },
-      tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => formatMoney(Math.round(Number(value) * 100)) },
-      legend: { top: 0, data: ['收入', '支出', '总资产'] },
-      xAxis: { type: 'category', boundaryGap: false, data: points.map((row) => row.period), axisLabel: { hideOverlap: true } },
-      yAxis: { type: 'value', axisLabel: { formatter: (value: number) => `¥${Math.round(value)}` }, splitLine: { lineStyle: { color: '#eef1f5' } } },
-      series: [
-        { name: '收入', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.incomeMinor / 100) },
-        { name: '支出', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.expenseMinor / 100) },
-        { name: '总资产', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.netWorthMinor / 100) },
-      ],
-    }, true);
-    trendChart.resize();
-  }
-  if (categoryEl.value) {
-    if (categoryChart && categoryChart.getDom() !== categoryEl.value) {
-      categoryChart.dispose();
-      categoryChart = null;
+    if (categoryEl.value) {
+      if (categoryChart && categoryChart.getDom() !== categoryEl.value) {
+        categoryChart.dispose();
+        categoryChart = null;
+      }
+      categoryChart ??= init(categoryEl.value);
+      const rows = breakdown.value?.categories ?? [];
+      categoryChart.setOption({
+        animationDuration: 240,
+        tooltip: { trigger: 'item', formatter: (item: { name: string; value: number; percent: number }) => `${item.name}<br>${formatMoney(Math.round(item.value * 100))} · ${item.percent}%` },
+        series: [{ type: 'pie', radius: ['50%', '76%'], center: ['50%', '48%'], minAngle: 3, itemStyle: { borderColor: '#fff', borderWidth: 2 }, label: { formatter: '{b}\n{d}%', fontSize: 11 }, data: rows.map((row) => ({ name: row.name, value: row.amountMinor / 100, itemStyle: { color: row.color ?? '#94a3b8' } })) }],
+      }, true);
+      categoryChart.resize();
     }
-    categoryChart ??= echarts.init(categoryEl.value);
-    const rows = breakdown.value?.categories ?? [];
-    categoryChart.setOption({
-      animationDuration: 240,
-      tooltip: { trigger: 'item', formatter: (item: { name: string; value: number; percent: number }) => `${item.name}<br>${formatMoney(Math.round(item.value * 100))} · ${item.percent}%` },
-      series: [{ type: 'pie', radius: ['50%', '76%'], center: ['50%', '48%'], minAngle: 3, itemStyle: { borderColor: '#fff', borderWidth: 2 }, label: { formatter: '{b}\n{d}%', fontSize: 11 }, data: rows.map((row) => ({ name: row.name, value: row.amountMinor / 100, itemStyle: { color: row.color ?? '#94a3b8' } })) }],
-    }, true);
-    categoryChart.resize();
+    chartsReady.value = true;
+  } catch {
+    chartError.value = '图表加载失败，请刷新页面重试';
   }
 }
 
@@ -165,8 +178,8 @@ useCachedPage({
     </div>
 
     <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
-      <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div ref="trendEl" class="mt-3 h-64 w-full"></div></article>
-      <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div class="relative mt-3 h-64"><div ref="categoryEl" class="h-full w-full"></div><p v-if="!breakdown?.categories.length" class="absolute inset-0 grid place-items-center text-sm text-ink-3">该区间没有支出。</p></div></article>
+      <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div class="relative mt-3 h-64"><div ref="trendEl" class="h-full w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p></div></article>
+      <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div class="relative mt-3 h-64"><div ref="categoryEl" class="h-full w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p><p v-else-if="!breakdown?.categories.length" class="absolute inset-0 grid place-items-center text-sm text-ink-3">该区间没有支出。</p></div></article>
     </div>
 
     <div class="grid gap-4 lg:grid-cols-3">
