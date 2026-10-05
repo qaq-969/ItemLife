@@ -2,7 +2,7 @@
 
 <https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-Required Notice: Copyright (c) 2026 Chen Ze Wen
+Required Notice: Copyright (c) 2026 Chen Ze Wen. ItemLife: https://itemlife.20040507.xyz and https://itemlife.ultracore.vip
 
 ## Acceptance
 
