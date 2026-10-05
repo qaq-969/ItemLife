@@ -23,6 +23,7 @@ const trendEl = ref<HTMLDivElement | null>(null);
 const categoryEl = ref<HTMLDivElement | null>(null);
 let trendChart: ECharts | null = null;
 let categoryChart: ECharts | null = null;
+let chartResizeObserver: ResizeObserver | null = null;
 
 const periodOptions = [
   { value: 'month', label: '本月' },
@@ -77,6 +78,10 @@ async function load(): Promise<void> {
 async function renderCharts(): Promise<void> {
   const echarts = await import('echarts');
   if (trendEl.value) {
+    if (trendChart && trendChart.getDom() !== trendEl.value) {
+      trendChart.dispose();
+      trendChart = null;
+    }
     trendChart ??= echarts.init(trendEl.value);
     const points = trend.value?.points ?? [];
     trendChart.setOption({
@@ -93,8 +98,13 @@ async function renderCharts(): Promise<void> {
         { name: '总资产', type: 'line', smooth: true, symbolSize: 6, data: points.map((row) => row.netWorthMinor / 100) },
       ],
     }, true);
+    trendChart.resize();
   }
   if (categoryEl.value) {
+    if (categoryChart && categoryChart.getDom() !== categoryEl.value) {
+      categoryChart.dispose();
+      categoryChart = null;
+    }
     categoryChart ??= echarts.init(categoryEl.value);
     const rows = breakdown.value?.categories ?? [];
     categoryChart.setOption({
@@ -102,14 +112,36 @@ async function renderCharts(): Promise<void> {
       tooltip: { trigger: 'item', formatter: (item: { name: string; value: number; percent: number }) => `${item.name}<br>${formatMoney(Math.round(item.value * 100))} · ${item.percent}%` },
       series: [{ type: 'pie', radius: ['50%', '76%'], center: ['50%', '48%'], minAngle: 3, itemStyle: { borderColor: '#fff', borderWidth: 2 }, label: { formatter: '{b}\n{d}%', fontSize: 11 }, data: rows.map((row) => ({ name: row.name, value: row.amountMinor / 100, itemStyle: { color: row.color ?? '#94a3b8' } })) }],
     }, true);
+    categoryChart.resize();
   }
 }
 
 function resizeCharts(): void { trendChart?.resize(); categoryChart?.resize(); }
+function observeChartSizes(): void {
+  chartResizeObserver ??= new ResizeObserver(resizeCharts);
+  chartResizeObserver.disconnect();
+  if (trendEl.value) chartResizeObserver.observe(trendEl.value);
+  if (categoryEl.value) chartResizeObserver.observe(categoryEl.value);
+}
+
+async function reactivateDashboard(): Promise<void> {
+  await nextTick();
+  observeChartSizes();
+  await renderCharts();
+  await load();
+}
+
 watch([period, granularity], () => { void load(); });
-onMounted(() => { window.addEventListener('resize', resizeCharts); void load(); });
-onBeforeUnmount(() => { window.removeEventListener('resize', resizeCharts); trendChart?.dispose(); categoryChart?.dispose(); });
-useCachedPage({ refresh: load });
+onMounted(() => { observeChartSizes(); void load(); });
+onBeforeUnmount(() => {
+  chartResizeObserver?.disconnect();
+  trendChart?.dispose();
+  categoryChart?.dispose();
+});
+useCachedPage({
+  refresh: reactivateDashboard,
+  deactivate: () => { chartResizeObserver?.disconnect(); },
+});
 </script>
 
 <template>
@@ -134,7 +166,7 @@ useCachedPage({ refresh: load });
 
     <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
       <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div ref="trendEl" class="mt-3 h-64 w-full"></div></article>
-      <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div v-if="breakdown?.categories.length" ref="categoryEl" class="mt-3 h-64 w-full"></div><p v-else class="mt-6 text-sm text-ink-3">该区间没有支出。</p></article>
+      <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div class="relative mt-3 h-64"><div ref="categoryEl" class="h-full w-full"></div><p v-if="!breakdown?.categories.length" class="absolute inset-0 grid place-items-center text-sm text-ink-3">该区间没有支出。</p></div></article>
     </div>
 
     <div class="grid gap-4 lg:grid-cols-3">
