@@ -46,6 +46,7 @@ const route = useRoute();
 const auth = useAuthStore();
 const domain = useDomainStore();
 const ledger = useLedgerStore();
+const CACHED_VIEW_NAMES = ['DashboardView', 'LedgerView', 'ItemsView', 'FamilyView', 'MeView'];
 const parentRoute = computed(() => {
   const name = route.meta.parent;
   if (typeof name !== 'string') return null;
@@ -127,7 +128,9 @@ onMounted(() => { void domain.load().catch(() => undefined); });
         </nav>
         <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="page" mode="out-in">
-            <component :is="Component" :key="`${String(currentRoute.name)}:${domain.active}`" />
+            <KeepAlive :include="CACHED_VIEW_NAMES" :max="10">
+              <component :is="Component" :key="`${String(currentRoute.name)}:${domain.active}`" />
+            </KeepAlive>
           </Transition>
         </RouterView>
       </main>

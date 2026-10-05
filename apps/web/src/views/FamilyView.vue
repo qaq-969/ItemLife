@@ -5,6 +5,7 @@ import { familyApi } from '@/api/family';
 import { ApiError } from '@/api/http';
 import { useDomainStore } from '@/stores/domain';
 import AppModal from '@/components/AppModal.vue';
+import { useCachedPage } from '@/utils/cached-page';
 
 const domain = useDomainStore();
 const selectedId = ref('');
@@ -180,6 +181,14 @@ function copyInvite(): void {
 }
 
 onMounted(() => { void run(() => reload(domain.activeHousehold?.id)); });
+useCachedPage({
+  refresh: () => run(() => reload(selectedId.value)),
+  deactivate: () => {
+    pendingConfirm.value = null;
+    renameOpen.value = false;
+    deleteOpen.value = false;
+  },
+});
 </script>
 
 <template>

@@ -9,6 +9,7 @@ import { useDomainStore } from '@/stores/domain';
 import AppDateTimePicker from '@/components/AppDateTimePicker.vue';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
+import { useCachedPage } from '@/utils/cached-page';
 
 const TYPE_LABELS: Record<string, string> = { income: '收入', expense: '支出', transfer_in: '转入', transfer_out: '转出' };
 
@@ -96,8 +97,8 @@ function showMessage(text: string): void {
   }, 3_000);
 }
 
-async function load(): Promise<void> {
-  loading.value = true;
+async function load(background = false): Promise<void> {
+  if (!background || items.value.length === 0) loading.value = true;
   errorText.value = null;
   try {
     const page = await transactionsApi.list(queryParams());
@@ -314,6 +315,10 @@ onMounted(async () => {
     if (target) openEdit(target);
   }
 });
+useCachedPage({
+  refresh: () => Promise.all([ledger.refresh().catch(() => undefined), load(true)]).then(() => undefined),
+  deactivate: () => { editing.value = null; },
+});
 </script>
 
 <template>
@@ -349,7 +354,7 @@ onMounted(async () => {
       </div>
 
       <div class="mt-3 flex gap-2">
-        <button type="button" class="btn btn-primary min-h-10 flex-1 px-5 text-sm sm:flex-none" :disabled="loading" @click="load">
+        <button type="button" class="btn btn-primary min-h-10 flex-1 px-5 text-sm sm:flex-none" :disabled="loading" @click="load()">
           {{ loading ? '查询中…' : '查询' }}
         </button>
         <button type="button" class="btn btn-ghost min-h-10 flex-1 px-5 text-sm sm:flex-none" @click="resetFilters">重置</button>

@@ -8,6 +8,7 @@ import { transactionsApi } from '@/api/ledger';
 import { ApiError } from '@/api/http';
 import AppSelect from '@/components/AppSelect.vue';
 import { useDomainStore } from '@/stores/domain';
+import { useCachedPage } from '@/utils/cached-page';
 
 const domain = useDomainStore();
 const period = ref('month');
@@ -108,6 +109,7 @@ function resizeCharts(): void { trendChart?.resize(); categoryChart?.resize(); }
 watch([period, granularity], () => { void load(); });
 onMounted(() => { window.addEventListener('resize', resizeCharts); void load(); });
 onBeforeUnmount(() => { window.removeEventListener('resize', resizeCharts); trendChart?.dispose(); categoryChart?.dispose(); });
+useCachedPage({ refresh: load });
 </script>
 
 <template>

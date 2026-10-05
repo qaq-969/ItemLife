@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import AppModal from '@/components/AppModal.vue';
 import { toApiError } from '@/api/http';
+import { useCachedPage } from '@/utils/cached-page';
 
 const auth = useAuthStore();
 const router = useRouter();
@@ -67,6 +68,8 @@ async function saveNickname(): Promise<void> {
     savingNickname.value = false;
   }
 }
+
+useCachedPage({ deactivate: () => { nicknameOpen.value = false; } });
 </script>
 
 <template>

@@ -7,6 +7,7 @@ import { ApiError } from '@/api/http';
 import AppModal from '@/components/AppModal.vue';
 import AppSelect from '@/components/AppSelect.vue';
 import { useDomainStore } from '@/stores/domain';
+import { useCachedPage } from '@/utils/cached-page';
 
 const STATUS_LABELS: Record<ItemStatus, string> = {
   in_use: '在役',
@@ -34,8 +35,8 @@ const focusedId = ref('');
 const filters = ref<{ status: ItemStatus | ''; keyword: string }>({ status: '', keyword: '' });
 
 /** 筛选变化后重新从第一页拉取（游标分页不适合在客户端过滤）。 */
-async function reload(): Promise<void> {
-  loading.value = true;
+async function reload(background = false): Promise<void> {
+  if (!background || items.value.length === 0) loading.value = true;
   errorText.value = null;
   try {
     const query: ItemQuery = { limit: 20, domain: domain.query };
@@ -144,6 +145,15 @@ onMounted(async () => {
   await reload();
   await restoreItemPosition();
 });
+useCachedPage({
+  refresh: async () => {
+    await reload(true);
+    await restoreItemPosition();
+  },
+  deactivate: () => {
+    if (!deleting.value) deleteTarget.value = null;
+  },
+});
 </script>
 
 <template>
@@ -207,13 +217,13 @@ onMounted(async () => {
           class="field"
           maxlength="50"
           placeholder="搜索物品名称"
-          @keyup.enter="reload"
+          @keyup.enter="reload()"
         />
       </div>
-      <button type="button" class="btn btn-ghost col-span-2 w-full sm:w-24" @click="reload">筛选</button>
+      <button type="button" class="btn btn-ghost col-span-2 w-full sm:w-24" @click="reload()">筛选</button>
     </div>
 
-    <p v-if="loading" class="card p-5 text-sm text-ink-3">正在加载…</p>
+    <p v-if="loading && items.length === 0" class="card p-5 text-sm text-ink-3">正在加载…</p>
     <p v-else-if="items.length === 0" class="card p-5 text-sm text-ink-3">
       {{ hasFilter ? '没有符合条件的物品。' : '还没有物品。录入第一件物品后，就能看到它的日均持有成本了。' }}
     </p>
