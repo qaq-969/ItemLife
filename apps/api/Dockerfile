@@ -34,6 +34,7 @@ COPY --from=builder /repo/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder /repo/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /repo/apps/api/dist ./apps/api/dist
 COPY --from=builder /repo/apps/api/prisma ./apps/api/prisma
+COPY --from=builder /repo/apps/api/log-collector.mjs ./apps/api/log-collector.mjs
 
 COPY apps/api/docker-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

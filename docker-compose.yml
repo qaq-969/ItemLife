@@ -3,6 +3,32 @@
 name: itemlife
 
 services:
+  log-collector:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: runner
+    image: itemlife/api:latest
+    entrypoint: ['node', 'apps/api/log-collector.mjs']
+    environment:
+      LOG_DIR: /logs
+      LOG_PORT: '15140'
+      LOG_MAX_BYTES: '20971520'
+      LOG_RETENTION_DAYS: '30'
+      TZ: Asia/Shanghai
+    ports:
+      - '127.0.0.1:15140:15140/udp'
+    volumes:
+      - logs:/logs
+    networks:
+      - backend
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   web:
     build:
       context: .
@@ -25,10 +51,11 @@ services:
       start_period: 10s
     restart: unless-stopped
     logging:
-      driver: json-file
+      driver: syslog
       options:
-        max-size: '10m'
-        max-file: '3'
+        syslog-address: 'udp://127.0.0.1:15140'
+        syslog-format: rfc5424micro
+        tag: itemlife-web
 
   api:
     build:
@@ -62,10 +89,11 @@ services:
       start_period: 40s
     restart: unless-stopped
     logging:
-      driver: json-file
+      driver: syslog
       options:
-        max-size: '10m'
-        max-file: '3'
+        syslog-address: 'udp://127.0.0.1:15140'
+        syslog-format: rfc5424micro
+        tag: itemlife-api
 
   mysql:
     image: mysql:8.4
@@ -90,10 +118,11 @@ services:
       start_period: 30s
     restart: unless-stopped
     logging:
-      driver: json-file
+      driver: syslog
       options:
-        max-size: '10m'
-        max-file: '3'
+        syslog-address: 'udp://127.0.0.1:15140'
+        syslog-format: rfc5424micro
+        tag: itemlife-mysql
 
   redis:
     image: redis:7-alpine
@@ -112,15 +141,17 @@ services:
       start_period: 10s
     restart: unless-stopped
     logging:
-      driver: json-file
+      driver: syslog
       options:
-        max-size: '10m'
-        max-file: '3'
+        syslog-address: 'udp://127.0.0.1:15140'
+        syslog-format: rfc5424micro
+        tag: itemlife-redis
 
 volumes:
   mysql_data:
   redis_data:
   uploads: # 物品图片等用户上传文件
+  logs: # 容器日志：跨容器重建保留，20 MB 分片，保留 30 天
 
 networks:
   frontend: # 仅 web：发布 HTTP 端口，承接外部反向代理回源
