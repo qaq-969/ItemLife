@@ -42,7 +42,7 @@
   <h2>结论</h2>
   <section class="card verdict">
     <h3>建议保留“我的”，撤销独立“设置”主导航</h3>
-    <p>“我的”升级为统一管理中心；桌面侧栏与移动底栏都只保留“我的”。账户、分类、家庭、安全、站点管理按任务分组呈现。原 <code>/settings</code> 保留兼容跳转，已有子页面和接口不需要重写。</p>
+    <p>“我的”升级为统一管理中心；桌面侧栏保留高频的“家庭”入口，移动底栏保持五项结构和凸起的“记一笔”图标。账户、分类、家庭、安全、站点管理按任务分组呈现，原 <code>/settings</code> 页面和路由直接移除；业务接口与数据库结构保持兼容。</p>
   </section>
 
   <h2>现状与重复来源</h2>
@@ -83,7 +83,7 @@
     <section class="card"><h3>C. 侧栏设置抽屉</h3><p class="muted">不离开当前页即可配置，但手机和桌面需要两套交互。</p><p class="risk">实现成本高，当前功能量不值得</p></section>
   </div>
 
-  <h2>推荐的信息结构</h2>
+  <h2>确认采用的信息结构</h2>
   <table>
     <thead><tr><th>“我的”分组</th><th>内容</th><th>展示规则</th></tr></thead>
     <tbody>
@@ -99,9 +99,9 @@
   <h2>目标界面示意</h2>
   <div class="grid g2">
     <section>
-      <h3>桌面端：主侧栏只保留一个管理入口</h3>
+      <h3>桌面端：保留家庭，其他管理入口归入“我的”</h3>
       <div class="nav-demo">
-        <div class="side"><div class="logo">ItemLife</div><div class="nav-item">首页</div><div class="nav-item">流水</div><div class="nav-item">记一笔</div><div class="nav-item">物品</div><div class="nav-item on">我的</div></div>
+        <div class="side"><div class="logo">ItemLife</div><div class="nav-item">首页</div><div class="nav-item">流水</div><div class="nav-item">记一笔</div><div class="nav-item">物品</div><div class="nav-item">家庭</div><div class="nav-item on">我的</div></div>
         <div class="hub"><div class="profile"><b>陈泽闻</b><div class="muted">账号状态与 MFA 摘要</div></div><div class="group"><b>账本设置</b><div class="row"><span>账户管理</span><span>›</span></div><div class="row"><span>分类管理</span><span>›</span></div></div><div class="group"><b>账户与协作</b><div class="row"><span>家庭与邀请</span><span>›</span></div><div class="row"><span>账号安全</span><span>›</span></div></div></div>
       </div>
     </section>
@@ -113,25 +113,25 @@
 
   <h2>路由与实施建议</h2>
   <div class="grid g2">
-    <section class="card step" data-step="1"><h3>统一导航</h3><p>桌面侧栏移除“设置”“家庭”“站点管理”的重复主入口，仅保留“我的”；移动底栏不变。</p></section>
+    <section class="card step" data-step="1"><h3>统一导航</h3><p>桌面侧栏保留高频协作入口“家庭”，移除“设置”和“站点管理”；移动底栏保留五个入口及凸起的“记一笔”图标。</p></section>
     <section class="card step" data-step="2"><h3>重组“我的”</h3><p>将现有入口按账本、协作、安全、管理分组；账户与分类直接进入对应页面，减少一层跳转。</p></section>
-    <section class="card step" data-step="3"><h3>兼容旧地址</h3><p><code>/settings</code> 重定向到 <code>/me</code>；账户、分类、安全、家庭与站点管理路由继续保留。</p></section>
+    <section class="card step" data-step="3"><h3>移除旧设置页</h3><p>删除 <code>/settings</code> 页面和路由，账号安全迁移到 <code>/me/security</code>；账户、分类、家庭与站点管理继续使用独立路由，不涉及数据迁移。</p></section>
     <section class="card step" data-step="4"><h3>补齐返回关系</h3><p>所有管理子页提供“返回我的”或面包屑；浏览器返回键维持原历史，不强制跳首页。</p></section>
   </div>
 
   <h2>可用性与验收标准</h2>
   <ul class="card">
-    <li>桌面和移动端的管理入口都命名为“我的”。</li>
+    <li>桌面保留“家庭”和“我的”，移动端通过“我的”进入家庭与管理功能。</li>
     <li>每个功能只有一个主要入口，账户、分类、家庭、安全最多两次点击可达。</li>
     <li>管理员功能按角色显示，不留下无权限空分组。</li>
     <li>分组使用真实标题和说明，不只依赖图标或颜色表达。</li>
     <li>列表行触控高度至少 44px，键盘焦点清晰，当前页同时用背景和文字状态表达。</li>
-    <li>旧的 <code>/settings</code> 地址仍可使用，不产生 404。</li>
+    <li>旧的 <code>/settings</code> 页面、路由和重复入口已移除。</li>
   </ul>
 
   <h2>证据范围</h2>
   <section class="card muted">
-    <p>本报告检查了当前 <code>AppShell.vue</code>、<code>MeView.vue</code>、<code>SettingsView.vue</code> 和路由配置，结论针对现有信息结构与入口关系。当前运行环境没有可操控的登录态浏览器截图工具，因此未将像素级布局、键盘焦点和屏幕阅读器行为表述为已验证结果；这些项目应在实施后通过桌面与手机实机复核。</p>
+    <p>本报告检查了 <code>AppShell.vue</code>、<code>MeView.vue</code>、已移除的旧 <code>SettingsView.vue</code> 和路由配置，结论针对现有信息结构与入口关系。当前运行环境没有可操控的登录态浏览器截图工具，因此未将像素级布局、键盘焦点和屏幕阅读器行为表述为已验证结果；这些项目应在本地 Docker 审阅版中通过桌面与手机实机复核。</p>
   </section>
 </main>
 </body>

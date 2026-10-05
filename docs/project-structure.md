@@ -87,7 +87,7 @@ apps/web/
 │   │   ├── AccountsView.vue  CategoriesView.vue
 │   │   ├── ItemsView.vue  ItemDetailView.vue  ItemFormView.vue
 │   │   ├── DashboardView.vue  FamilyView.vue  SiteAdminView.vue
-│   │   ├── MeView.vue  SecurityView.vue  SettingsView.vue
+│   │   ├── MeView.vue  SecurityView.vue
 │   │   └── NotFoundView.vue
 │   ├── components/           # 可复用小组件（AppSelect / AppDateTimePicker / AppModal 等）
 │   ├── utils/                # 无状态辅助函数（navigation.ts）
