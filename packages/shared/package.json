@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "前后端共享：金额工具、领域常量、DTO 类型",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "ItemLife 前端（Vue 3 + Vite + Tailwind + Pinia）",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",

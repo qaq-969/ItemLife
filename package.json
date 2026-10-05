@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ItemLife —— 以物品为视角的个人 / 家庭记账 Web 应用（Monorepo）",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=20"
