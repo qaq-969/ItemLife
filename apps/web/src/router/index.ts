@@ -53,13 +53,13 @@ const routes: RouteRecordRaw[] = [
         path: 'items/:id',
         name: 'item-detail',
         component: () => import('@/views/ItemDetailView.vue'),
-        meta: { title: '物品详情' },
+        meta: { title: '物品详情', nav: 'items', parent: 'items' },
       },
       {
         path: 'items/:id/edit',
         name: 'item-edit',
         component: () => import('@/views/ItemFormView.vue'),
-        meta: { title: '编辑物品' },
+        meta: { title: '编辑物品', nav: 'items', parent: 'items' },
       },
       {
         path: 'me',
@@ -105,7 +105,7 @@ const routes: RouteRecordRaw[] = [
 export const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
 });
 
 router.beforeEach((to) => {

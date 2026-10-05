@@ -49,7 +49,9 @@ const ledger = useLedgerStore();
 const parentRoute = computed(() => {
   const name = route.meta.parent;
   if (typeof name !== 'string') return null;
-  return { name, title: name === 'me' ? '我的' : name };
+  const titles: Record<string, string> = { me: '我的', items: '物品' };
+  const query = name === 'items' && typeof route.params.id === 'string' ? { focus: route.params.id } : undefined;
+  return { to: { name, query }, title: titles[name] ?? name };
 });
 
 const pageTitle = computed(() => (typeof route.meta.title === 'string' ? route.meta.title : 'ItemLife'));
@@ -114,12 +116,12 @@ onMounted(() => { void domain.load().catch(() => undefined); });
       <main
         class="mx-auto w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
-        <div class="mb-4 flex items-center gap-2">
+        <div class="mb-4 flex items-center justify-between gap-3">
           <p class="text-xs font-semibold text-ink-3">当前数据域</p>
           <AppSelect :model-value="domain.active" :options="domain.options" class="w-44" @update:model-value="domain.setActive" />
         </div>
         <nav v-if="parentRoute" class="mb-4 flex min-h-8 items-center gap-2 text-sm" aria-label="页面层级">
-          <RouterLink :to="{ name: parentRoute.name }" class="font-medium text-brand hover:underline">{{ parentRoute.title }}</RouterLink>
+          <RouterLink :to="parentRoute.to" class="font-medium text-brand hover:underline">{{ parentRoute.title }}</RouterLink>
           <span class="text-ink-3" aria-hidden="true">/</span>
           <span class="text-ink-2" aria-current="page">{{ pageTitle }}</span>
         </nav>

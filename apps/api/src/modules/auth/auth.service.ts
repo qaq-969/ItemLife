@@ -199,6 +199,16 @@ export class AuthService {
     return AuthUserVo.from(await this.requireUser(userId));
   }
 
+  async updateProfile(userId: string, value: string): Promise<AuthUserVo> {
+    const nickname = value.trim();
+    if (!nickname) {
+      throw new BadRequestException({ code: 'NICKNAME_REQUIRED', message: '昵称不能为空' });
+    }
+    const user = await this.requireUser(userId);
+    const updated = await this.prisma.user.update({ where: { id: user.id }, data: { nickname } });
+    return AuthUserVo.from(updated);
+  }
+
   async createMfaSetup(userId: string): Promise<MfaSetupVo> {
     const setup = await this.mfaService.createSetup(await this.requireUser(userId));
     return Object.assign(new MfaSetupVo(), setup);

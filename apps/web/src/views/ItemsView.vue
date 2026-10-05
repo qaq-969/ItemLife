@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { RouterLink } from 'vue-router';
+import { computed, nextTick, onMounted, ref } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
 import { ITEM_STATUSES, formatMoney, type ItemDto, type ItemStatus, type ItemsOverviewDto } from '@itemlife/shared';
 import { itemsApi, type ItemQuery } from '@/api/items';
 import { ApiError } from '@/api/http';
@@ -15,6 +15,8 @@ const STATUS_LABELS: Record<ItemStatus, string> = {
   lost: '遗失',
 };
 const domain = useDomainStore();
+const route = useRoute();
+const RETURN_TARGET_KEY = 'itemlife:item-return-target';
 
 const overview = ref<ItemsOverviewDto | null>(null);
 const items = ref<ItemDto[]>([]);
@@ -27,6 +29,7 @@ const message = ref<string | null>(null);
 const deleting = ref(false);
 const deleteTarget = ref<ItemDto | null>(null);
 const deleteReason = ref('');
+const focusedId = ref('');
 
 const filters = ref<{ status: ItemStatus | ''; keyword: string }>({ status: '', keyword: '' });
 
@@ -109,8 +112,37 @@ async function remove(): Promise<void> {
 const board = computed(() => overview.value);
 const hasFilter = computed(() => Boolean(filters.value.status) || Boolean(filters.value.keyword.trim()));
 
-onMounted(() => {
-  void reload();
+function rememberItem(id: string): void {
+  sessionStorage.setItem(RETURN_TARGET_KEY, JSON.stringify({ id, loadedCount: items.value.length }));
+}
+
+async function restoreItemPosition(): Promise<void> {
+  let snapshot: { id?: string; loadedCount?: number } = {};
+  try { snapshot = JSON.parse(sessionStorage.getItem(RETURN_TARGET_KEY) ?? '{}'); } catch { /* 忽略损坏的页签状态 */ }
+  const queryTarget = typeof route.query.focus === 'string' ? route.query.focus : '';
+  const targetId = queryTarget || snapshot.id || '';
+  if (!targetId) return;
+
+  const wantedCount = snapshot.loadedCount ?? total.value;
+  while (!items.value.some((item) => item.id === targetId) && nextCursor.value && items.value.length < wantedCount) {
+    const previousCursor = nextCursor.value;
+    await loadMore();
+    if (nextCursor.value === previousCursor) break;
+  }
+  await nextTick();
+  const target = [...document.querySelectorAll<HTMLElement>('[data-item-id]')]
+    .find((element) => element.dataset.itemId === targetId);
+  if (target) {
+    target.scrollIntoView({ block: 'center' });
+    focusedId.value = targetId;
+    window.setTimeout(() => { if (focusedId.value === targetId) focusedId.value = ''; }, 1_800);
+  }
+  sessionStorage.removeItem(RETURN_TARGET_KEY);
+}
+
+onMounted(async () => {
+  await reload();
+  await restoreItemPosition();
 });
 </script>
 
@@ -148,7 +180,7 @@ onMounted(() => {
             :key="row.id"
             class="flex items-center justify-between gap-3 text-sm"
           >
-            <RouterLink :to="{ name: 'item-detail', params: { id: row.id } }" class="min-w-0 truncate">
+            <RouterLink :to="{ name: 'item-detail', params: { id: row.id }, query: { from: 'items' } }" class="min-w-0 truncate" @click="rememberItem(row.id)">
               <span class="mr-2 text-xs text-ink-3">{{ index + 1 }}.</span>{{ row.name }}
             </RouterLink>
             <span class="shrink-0 tabular-nums text-ink-2">
@@ -162,12 +194,12 @@ onMounted(() => {
     <p v-if="message" class="rounded-lg bg-ok-soft px-3 py-2 text-sm text-ok">{{ message }}</p>
     <p v-if="errorText" class="form-error">{{ errorText }}</p>
 
-    <div class="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
-      <div class="sm:w-40">
+    <div class="card grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] items-end gap-2 p-4 sm:flex sm:gap-3">
+      <div class="min-w-0 sm:w-40">
         <label class="label" for="item-status">状态</label>
         <AppSelect v-model="filters.status" :options="[{ value: '', label: '全部' }, ...ITEM_STATUSES.map((status) => ({ value: status, label: STATUS_LABELS[status] }))]" />
       </div>
-      <div class="flex-1">
+      <div class="min-w-0 sm:flex-1">
         <label class="label" for="item-keyword">名称</label>
         <input
           id="item-keyword"
@@ -178,7 +210,7 @@ onMounted(() => {
           @keyup.enter="reload"
         />
       </div>
-      <button type="button" class="btn btn-ghost sm:w-24" @click="reload">筛选</button>
+      <button type="button" class="btn btn-ghost col-span-2 justify-self-end sm:w-24" @click="reload">筛选</button>
     </div>
 
     <p v-if="loading" class="card p-5 text-sm text-ink-3">正在加载…</p>
@@ -187,13 +219,20 @@ onMounted(() => {
     </p>
 
     <ul v-else class="space-y-2">
-      <li v-for="item in items" :key="item.id" class="card p-4">
+      <li
+        v-for="item in items"
+        :key="item.id"
+        :data-item-id="item.id"
+        class="card p-4 transition-[border-color,box-shadow] duration-500"
+        :class="focusedId === item.id ? 'border-brand shadow-[0_0_0_3px_rgba(79,70,229,0.14)]' : ''"
+      >
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <RouterLink
-                :to="{ name: 'item-detail', params: { id: item.id } }"
+                :to="{ name: 'item-detail', params: { id: item.id }, query: { from: 'items' } }"
                 class="truncate font-medium text-brand"
+                @click="rememberItem(item.id)"
               >
                 {{ item.name }}
               </RouterLink>
@@ -235,8 +274,9 @@ onMounted(() => {
 
         <div class="mt-3 flex flex-wrap gap-2">
           <RouterLink
-            :to="{ name: 'item-detail', params: { id: item.id } }"
+            :to="{ name: 'item-detail', params: { id: item.id }, query: { from: 'items' } }"
             class="btn btn-ghost min-h-9 px-3 text-xs"
+            @click="rememberItem(item.id)"
           >
             详情与配件
           </RouterLink>

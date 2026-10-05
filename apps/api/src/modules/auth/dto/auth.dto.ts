@@ -38,3 +38,10 @@ export class LoginDto {
   @MaxLength(128)
   password!: string;
 }
+
+export class UpdateProfileDto {
+  @ApiProperty({ example: '小明', maxLength: 50 })
+  @IsString()
+  @MaxLength(50)
+  nickname!: string;
+}

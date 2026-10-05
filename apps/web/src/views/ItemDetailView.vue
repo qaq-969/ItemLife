@@ -196,6 +196,14 @@ function closeRemoveItem(): void {
   deleteReason.value = '';
 }
 
+function returnToItems(): void {
+  if (route.query.from === 'items') {
+    router.back();
+    return;
+  }
+  void router.push({ name: 'items', query: typeof route.params.id === 'string' ? { focus: route.params.id } : {} });
+}
+
 async function removeItem(): Promise<void> {
   const item = detail.value;
   if (!item) return;
@@ -247,6 +255,9 @@ onBeforeUnmount(() => {
     </p>
 
     <template v-else>
+      <button type="button" class="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-brand hover:bg-brand-soft" @click="returnToItems">
+        <span aria-hidden="true">←</span> 返回物品
+      </button>
       <header class="card p-5">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">

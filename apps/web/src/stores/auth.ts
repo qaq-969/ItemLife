@@ -77,6 +77,10 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession();
   }
 
+  async function updateProfile(nickname: string): Promise<void> {
+    user.value = await authApi.updateProfile(nickname);
+  }
+
   return {
     accessToken,
     user,
@@ -90,6 +94,7 @@ export const useAuthStore = defineStore('auth', () => {
     bootstrap,
     login,
     verifyMfa,
+    updateProfile,
     logout,
   };
 });

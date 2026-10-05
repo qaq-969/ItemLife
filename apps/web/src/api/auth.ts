@@ -52,6 +52,7 @@ export const authApi = {
     unwrap<AuthSession>(http.post('/auth/mfa/verify', payload)),
   refresh: () => unwrap<AuthSession>(http.post('/auth/token/refresh', null)),
   me: () => unwrap<AuthUser>(http.get('/auth/me')),
+  updateProfile: (nickname: string) => unwrap<AuthUser>(http.patch('/auth/me', { nickname })),
   logout: () => unwrap<null>(http.post('/auth/logout', null)),
   logoutAll: () => unwrap<null>(http.post('/auth/logout-all', null)),
   mfaSetup: () => unwrap<MfaSetupResult>(http.post('/auth/mfa/setup', null)),

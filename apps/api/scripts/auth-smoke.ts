@@ -138,6 +138,11 @@ async function main(): Promise<void> {
   check('携带 Bearer 可访问受保护端点', me.status === 200 && me.body?.data?.email === EMAIL, JSON.stringify(me.body));
   check('资料响应不含密码哈希与 TOTP 密钥', !/argon2|totpSecret|passwordHash/i.test(JSON.stringify(me.body)), JSON.stringify(me.body));
 
+  const renamed = await request('PATCH', '/auth/me', { token: token1, body: { nickname: '新昵称' } });
+  check('登录用户可修改昵称', renamed.status === 200 && renamed.body?.data?.nickname === '新昵称', JSON.stringify(renamed.body));
+  const emptyNickname = await request('PATCH', '/auth/me', { token: token1, body: { nickname: '   ' } });
+  check('空昵称被拒绝', emptyNickname.status === 400 && emptyNickname.body?.code === 'NICKNAME_REQUIRED', JSON.stringify(emptyNickname.body));
+
   console.log('\n[4] MFA 绑定');
   const setup = await request('POST', '/auth/mfa/setup', { token: token1 });
   const secret = setup.body?.data?.secret as string;

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post, Req, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { REFRESH_COOKIE_NAME } from '@itemlife/shared';
@@ -9,7 +9,7 @@ import type { AuthenticatedUser } from '../../common/types/auth-user';
 import { clearRefreshCookieOptions, refreshCookieOptions } from './auth.cookie';
 import { AuthService, type IssuedSession, type LoginOutcome } from './auth.service';
 import { Device, type DeviceContext } from './device.decorator';
-import { LoginDto, RegisterDto } from './dto/auth.dto';
+import { LoginDto, RegisterDto, UpdateProfileDto } from './dto/auth.dto';
 import { AuthSessionVo, AuthUserVo, LoginResultVo, MfaEnableVo, MfaSetupVo } from './dto/auth.vo';
 import { MfaDisableDto, MfaEnableDto, MfaVerifyDto } from './dto/mfa.dto';
 
@@ -138,6 +138,13 @@ export class AuthController {
   @ApiOperation({ summary: '当前登录用户资料' })
   me(@CurrentUser() user: AuthenticatedUser): Promise<AuthUserVo> {
     return this.authService.profile(user.id);
+  }
+
+  @ApiBearerAuth()
+  @Patch('me')
+  @ApiOperation({ summary: '修改当前用户昵称' })
+  updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProfileDto): Promise<AuthUserVo> {
+    return this.authService.updateProfile(user.id, dto.nickname);
   }
 
   private writeRefreshCookie(request: Request, response: Response, issued: IssuedSession): void {
