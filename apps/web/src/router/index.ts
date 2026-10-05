@@ -53,7 +53,7 @@ const routes: RouteRecordRaw[] = [
         path: 'items/:id',
         name: 'item-detail',
         component: () => import('@/views/ItemDetailView.vue'),
-        meta: { title: '物品详情', nav: 'items', parent: 'items' },
+        meta: { title: '物品详情', nav: 'items' },
       },
       {
         path: 'items/:id/edit',

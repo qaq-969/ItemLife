@@ -210,7 +210,7 @@ onMounted(async () => {
           @keyup.enter="reload"
         />
       </div>
-      <button type="button" class="btn btn-ghost col-span-2 justify-self-end sm:w-24" @click="reload">筛选</button>
+      <button type="button" class="btn btn-ghost col-span-2 w-full sm:w-24" @click="reload">筛选</button>
     </div>
 
     <p v-if="loading" class="card p-5 text-sm text-ink-3">正在加载…</p>
