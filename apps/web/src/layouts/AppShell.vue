@@ -105,7 +105,7 @@ onMounted(() => { void domain.load().catch(() => undefined); });
       </div>
     </aside>
 
-    <div class="lg:pl-60">
+    <div class="min-w-0 lg:pl-60">
       <!-- 移动端顶栏 -->
       <header
         class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-white/95 px-4 backdrop-blur lg:hidden"
@@ -115,7 +115,7 @@ onMounted(() => { void domain.load().catch(() => undefined); });
       </header>
 
       <main
-        class="mx-auto w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
+        class="mx-auto min-w-0 w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
         <div class="mb-4 flex items-center justify-between gap-3">
           <p class="text-xs font-semibold text-ink-3">当前数据域</p>

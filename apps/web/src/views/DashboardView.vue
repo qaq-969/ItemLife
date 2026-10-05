@@ -158,7 +158,7 @@ useCachedPage({
 </script>
 
 <template>
-  <section class="space-y-4">
+  <section class="min-w-0 space-y-4">
     <header class="flex flex-wrap items-end justify-between gap-3">
       <div><h1 class="text-xl font-semibold">{{ domain.label }}看板</h1><p class="mt-1 text-sm text-ink-3">流水、账户余额与物品投入使用同一数据口径。</p></div>
       <div class="grid w-full grid-cols-2 gap-2 sm:w-auto sm:grid-cols-[140px_120px]">
@@ -177,9 +177,9 @@ useCachedPage({
       </article>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-[2fr_1fr]">
-      <article class="card p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div class="relative mt-3 h-64"><div ref="trendEl" class="h-full w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p></div></article>
-      <article class="card p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div class="relative mt-3 h-64"><div ref="categoryEl" class="h-full w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p><p v-else-if="!breakdown?.categories.length" class="absolute inset-0 grid place-items-center text-sm text-ink-3">该区间没有支出。</p></div></article>
+    <div class="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <article class="card min-w-0 overflow-hidden p-4"><div class="flex items-center justify-between"><h2 class="text-sm font-semibold">收支与总资产趋势</h2><span class="text-xs text-ink-3">{{ overview?.from }} 至 {{ overview?.to }}</span></div><div class="relative mt-3 h-64 min-w-0 overflow-hidden"><div ref="trendEl" class="h-full min-w-0 w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p></div></article>
+      <article class="card min-w-0 overflow-hidden p-4"><h2 class="text-sm font-semibold">支出分类占比</h2><div class="relative mt-3 h-64 min-w-0 overflow-hidden"><div ref="categoryEl" class="h-full min-w-0 w-full"></div><p v-if="!chartsReady" class="absolute inset-0 grid place-items-center text-sm text-ink-3">{{ chartError ?? '正在加载图表…' }}</p><p v-else-if="!breakdown?.categories.length" class="absolute inset-0 grid place-items-center text-sm text-ink-3">该区间没有支出。</p></div></article>
     </div>
 
     <div class="grid gap-4 lg:grid-cols-3">
