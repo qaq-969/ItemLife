@@ -130,7 +130,7 @@ onMounted(() => { void domain.load().catch(() => undefined); });
       <main
         class="mx-auto w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
-        <div class="mb-4 flex items-center justify-between gap-3">
+        <div class="mb-4 flex items-center gap-2">
           <p class="text-xs font-semibold text-ink-3">当前数据域</p>
           <AppSelect :model-value="domain.active" :options="domain.options" class="w-44" @update:model-value="domain.setActive" />
         </div>
