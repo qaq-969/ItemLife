@@ -111,13 +111,16 @@ onMounted(() => { void domain.load().catch(() => undefined); });
         class="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-line bg-white/95 px-4 backdrop-blur lg:hidden"
       >
         <span class="text-base font-semibold">{{ pageTitle }}</span>
-        <span class="max-w-[40%] truncate text-xs text-ink-3">{{ auth.displayName }}</span>
+        <div class="flex min-w-0 items-center justify-end gap-2">
+          <span class="shrink-0 text-xs font-semibold text-ink-3">当前数据域</span>
+          <AppSelect :model-value="domain.active" :options="domain.options" class="w-32" @update:model-value="domain.setActive" />
+        </div>
       </header>
 
       <main
         class="mx-auto min-w-0 w-full max-w-[1200px] px-4 pt-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:px-8 lg:pt-8 lg:pb-12"
       >
-        <div class="mb-4 flex items-center justify-between gap-3">
+        <div class="mb-4 hidden items-center justify-between gap-3 lg:flex">
           <p class="text-xs font-semibold text-ink-3">当前数据域</p>
           <AppSelect :model-value="domain.active" :options="domain.options" class="w-44" @update:model-value="domain.setActive" />
         </div>
