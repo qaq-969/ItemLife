@@ -1,9 +1,11 @@
 import { randomInt } from 'node:crypto';
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { SiteAdminOverviewDto, SiteInviteDto, SiteStatusDto, SiteUserDto } from '@itemlife/shared';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { checkPasswordStrength, type SiteAdminOverviewDto, type SiteInviteDto, type SiteStatusDto, type SiteUserDto } from '@itemlife/shared';
+import type { Prisma } from '@prisma/client';
 import { AuditService } from '../../common/audit/audit.service';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { deleteOwnerData } from '../../common/utils/delete-owner-data';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
 
 const INVITE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -115,6 +117,43 @@ export class SiteAdminService {
     return this.userVo(updated);
   }
 
+  async resetPassword(userId: string, targetUserId: string, password: string): Promise<null> {
+    await this.requireSuperAdmin(userId);
+    const target = await this.requireMutableUser(userId, targetUserId);
+    const strength = checkPasswordStrength(password);
+    if (!strength.ok) {
+      throw new BadRequestException({ code: 'PASSWORD_TOO_WEAK', message: `密码强度不足：${strength.issues.join('；')}` });
+    }
+    const passwordHash = await this.crypto.hashPassword(password);
+    const revokedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: target.id }, data: { passwordHash } });
+      await tx.refreshToken.updateMany({ where: { userId: target.id, revokedAt: null }, data: { revokedAt } });
+    });
+    this.audit.record('site.user.password_reset', { userId, targetUserId });
+    return null;
+  }
+
+  async deleteUser(userId: string, targetUserId: string): Promise<null> {
+    await this.requireSuperAdmin(userId);
+    const target = await this.requireMutableUser(userId, targetUserId);
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const households = await tx.household.findMany({ where: { ownerUserId: target.id }, select: { id: true } });
+      for (const household of households) {
+        await deleteOwnerData(tx, 'household', household.id);
+        await tx.householdInvite.deleteMany({ where: { householdId: household.id } });
+        await tx.householdMember.deleteMany({ where: { householdId: household.id } });
+        await tx.household.deleteMany({ where: { id: household.id } });
+      }
+      await deleteOwnerData(tx, 'user', target.id);
+      await tx.householdInvite.deleteMany({ where: { createdBy: target.id } });
+      await tx.householdMember.deleteMany({ where: { userId: target.id } });
+      await tx.user.deleteMany({ where: { id: target.id } });
+    });
+    this.audit.record('site.user.deleted', { userId, targetUserId, targetEmail: target.email });
+    return null;
+  }
+
   private async requireManager(userId: string) {
     const user = await this.requireUser(userId);
     if (user.disabledAt || (user.siteRole !== 'super_admin' && user.siteRole !== 'admin')) {
@@ -129,6 +168,17 @@ export class SiteAdminService {
       throw new ForbiddenException({ code: 'SUPER_ADMIN_REQUIRED', message: '仅超级管理员可以执行此操作' });
     }
     return user;
+  }
+
+  private async requireMutableUser(userId: string, targetUserId: string) {
+    if (userId === targetUserId) {
+      throw new ConflictException({ code: 'SITE_USER_SELF_FORBIDDEN', message: '不能对自己的超级管理员账号执行此操作' });
+    }
+    const target = await this.requireUser(targetUserId);
+    if (target.siteRole === 'super_admin') {
+      throw new ForbiddenException({ code: 'SUPER_ADMIN_IMMUTABLE', message: '不能修改超级管理员账号' });
+    }
+    return target;
   }
 
   private async requireUser(userId: string) {
@@ -146,10 +196,10 @@ export class SiteAdminService {
     };
   }
 
-  private inviteVo(row: { id: IdBytes; remark: string | null; expiresAt: Date; usedAt: Date | null; revokedAt: Date | null; createdAt: Date; creator: { email: string } }): SiteInviteDto {
+  private inviteVo(row: { id: IdBytes; remark: string | null; expiresAt: Date; usedAt: Date | null; revokedAt: Date | null; createdAt: Date; creator: { email: string } | null }): SiteInviteDto {
     return {
       id: bytesToUuid(row.id), remark: row.remark, expiresAt: row.expiresAt.toISOString(), usedAt: row.usedAt?.toISOString() ?? null,
-      revokedAt: row.revokedAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(), createdByEmail: row.creator.email,
+      revokedAt: row.revokedAt?.toISOString() ?? null, createdAt: row.createdAt.toISOString(), createdByEmail: row.creator?.email ?? '已删除用户',
     };
   }
 

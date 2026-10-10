@@ -12,4 +12,7 @@ export const siteAdminApi = {
     unwrap<SiteUserDto>(http.patch(`/site/admin/users/${id}/role`, { role })),
   updateStatus: (id: string, enabled: boolean) =>
     unwrap<SiteUserDto>(http.patch(`/site/admin/users/${id}/status`, { enabled })),
+  resetPassword: (id: string, password: string) =>
+    unwrap<null>(http.patch(`/site/admin/users/${id}/password`, { password })),
+  deleteUser: (id: string) => unwrap<null>(http.delete(`/site/admin/users/${id}`)),
 };

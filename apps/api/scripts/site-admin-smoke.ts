@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   };
   const register = (email: string, inviteCode?: string) =>
     request('POST', '/auth/register', { body: { email, password: PASSWORD, inviteCode } });
-  const login = (email: string) => request('POST', '/auth/login', { body: { email, password: PASSWORD } });
+  const login = (email: string, password = PASSWORD) => request('POST', '/auth/login', { body: { email, password } });
   const tokenOf = (response: { body: any }): string => response.body?.data?.accessToken ?? '';
   const cookieOf = (response: { cookies: string[] }): string =>
     response.cookies.find((value) => value.startsWith('il_refresh_token='))?.split(';')[0] ?? '';
@@ -117,7 +117,30 @@ async function main(): Promise<void> {
   const restoredLogin = await login('member@itemlife.local');
   check('恢复后可重新登录', restoredLogin.status === 200 && tokenOf(restoredLogin).length > 0, JSON.stringify(restoredLogin.body));
 
-  console.log('\n[5] 重新开放注册');
+  console.log('\n[5] 超级管理员重置密码与永久删除');
+  const resetPassword = 'Reset-Member-2026!';
+  const forbiddenReset = await request('PATCH', `/site/admin/users/${memberUser?.id}/password`, { token: adminToken, body: { password: resetPassword } });
+  check('普通管理员不能重置用户密码', forbiddenReset.status === 403 && forbiddenReset.body?.code === 'SUPER_ADMIN_REQUIRED', JSON.stringify(forbiddenReset.body));
+  const weakReset = await request('PATCH', `/site/admin/users/${memberUser?.id}/password`, { token: ownerToken, body: { password: 'weak' } });
+  check('重置密码仍执行统一强度规则', weakReset.status === 400 && weakReset.body?.code === 'PASSWORD_TOO_WEAK', JSON.stringify(weakReset.body));
+  const reset = await request('PATCH', `/site/admin/users/${memberUser?.id}/password`, { token: ownerToken, body: { password: resetPassword } });
+  check('超级管理员可重置其他用户密码', reset.status === 200, JSON.stringify(reset.body));
+  const resetOldAccess = await request('GET', '/auth/me', { token: tokenOf(restoredLogin) });
+  check('重置后现有访问令牌立即失效', resetOldAccess.status === 401, JSON.stringify(resetOldAccess.body));
+  const oldPasswordLogin = await login('member@itemlife.local');
+  check('重置后旧密码失效', oldPasswordLogin.status === 401, JSON.stringify(oldPasswordLogin.body));
+  const resetLogin = await login('member@itemlife.local', resetPassword);
+  check('重置后新密码可登录', resetLogin.status === 200, JSON.stringify(resetLogin.body));
+  const forbiddenDelete = await request('DELETE', `/site/admin/users/${memberUser?.id}`, { token: adminToken });
+  check('普通管理员不能永久删除用户', forbiddenDelete.status === 403 && forbiddenDelete.body?.code === 'SUPER_ADMIN_REQUIRED', JSON.stringify(forbiddenDelete.body));
+  const deleted = await request('DELETE', `/site/admin/users/${memberUser?.id}`, { token: ownerToken });
+  check('超级管理员可永久删除其他用户', deleted.status === 200, JSON.stringify(deleted.body));
+  const deletedLogin = await login('member@itemlife.local', resetPassword);
+  check('永久删除后用户无法登录', deletedLogin.status === 401, JSON.stringify(deletedLogin.body));
+  const afterDelete = await request('GET', '/site/admin', { token: ownerToken });
+  check('永久删除后用户不再出现在管理页', !afterDelete.body?.data?.users?.some((user: any) => user.email === 'member@itemlife.local'), JSON.stringify(afterDelete.body));
+
+  console.log('\n[6] 重新开放注册');
   const opened = await request('PATCH', '/site/admin/registration', { token: ownerToken, body: { registrationOpen: true } });
   check('超级管理员可重新开放注册', opened.status === 200 && opened.body?.data?.registrationOpen === true, JSON.stringify(opened.body));
   const needlessInvite = await request('POST', '/site/admin/invites', { token: ownerToken, body: {} });

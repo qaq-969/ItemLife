@@ -6,6 +6,7 @@ const logDir = process.env.LOG_DIR || '/logs';
 const port = Number(process.env.LOG_PORT || 15140);
 const maxBytes = Number(process.env.LOG_MAX_BYTES || 20 * 1024 * 1024);
 const retentionDays = Number(process.env.LOG_RETENTION_DAYS || 30);
+const flushIntervalMs = Number(process.env.LOG_FLUSH_INTERVAL_MS || 12 * 60 * 60 * 1000);
 const timeZone = process.env.TZ || 'Asia/Shanghai';
 const formatter = new Intl.DateTimeFormat('en-CA', {
   timeZone,
@@ -21,6 +22,9 @@ let currentPart = 0;
 let currentPath = '';
 let currentSize = 0;
 let lastCleanupAt = 0;
+let bufferedBytes = 0;
+let bufferedLines = [];
+let stopping = false;
 
 function dayKey(date) {
   const parts = Object.fromEntries(formatter.formatToParts(date).map(({ type, value }) => [type, value]));
@@ -57,17 +61,30 @@ function cleanup(now) {
   }
 }
 
+function flush() {
+  if (bufferedLines.length === 0) return;
+  const pending = bufferedLines;
+  bufferedLines = [];
+  bufferedBytes = 0;
+  for (const { day, line, bytes } of pending) {
+    if (day !== currentDay) selectTarget(day);
+    if (currentSize + bytes > maxBytes) rotate();
+    appendFileSync(currentPath, line);
+    currentSize += bytes;
+  }
+  cleanup(Date.now());
+}
+
 const server = dgram.createSocket('udp4');
 
 server.on('message', (message, remote) => {
   const now = new Date();
   const day = dayKey(now);
-  if (day !== currentDay) selectTarget(day);
-  cleanup(now.getTime());
   const line = `${now.toISOString()} ${remote.address} ${message.toString('utf8').replace(/[\r\n]+/g, '\\n')}\n`;
-  if (currentSize + Buffer.byteLength(line) > maxBytes) rotate();
-  appendFileSync(currentPath, line);
-  currentSize += Buffer.byteLength(line);
+  const bytes = Buffer.byteLength(line);
+  bufferedLines.push({ day, line, bytes });
+  bufferedBytes += bytes;
+  if (bufferedBytes >= maxBytes) flush();
 });
 
 server.on('error', (error) => {
@@ -75,11 +92,25 @@ server.on('error', (error) => {
 });
 
 server.bind(port, '0.0.0.0', () => {
-  console.log(`[log-collector] UDP ${port} -> ${logDir}（${maxBytes} bytes/片，保留 ${retentionDays} 天）`);
+  console.log(`[log-collector] UDP ${port} -> ${logDir}（每 ${flushIntervalMs}ms 或 ${maxBytes} bytes 落盘，保留 ${retentionDays} 天）`);
 });
 
+const flushTimer = setInterval(flush, flushIntervalMs);
+flushTimer.unref();
+
 function shutdown() {
-  server.close(() => process.exit(0));
+  if (stopping) return;
+  stopping = true;
+  clearInterval(flushTimer);
+  server.close(() => {
+    try {
+      flush();
+      process.exit(0);
+    } catch (error) {
+      console.error(`[log-collector] 关闭前落盘失败：${error.stack || error.message}`);
+      process.exit(1);
+    }
+  });
 }
 
 process.on('SIGINT', shutdown);

@@ -15,6 +15,7 @@ services:
       LOG_PORT: '15140'
       LOG_MAX_BYTES: '20971520'
       LOG_RETENTION_DAYS: '30'
+      LOG_FLUSH_INTERVAL_MS: '43200000'
       TZ: Asia/Shanghai
     ports:
       - '127.0.0.1:15140:15140/udp'
@@ -161,7 +162,7 @@ volumes:
   mysql_data:
   redis_data:
   uploads: # 物品图片等用户上传文件
-  logs: # 容器日志：跨容器重建保留，20 MB 分片，保留 30 天
+  logs: # 容器日志：每 12 小时或累计 20 MB 落盘，跨容器重建保留 30 天
 
 networks:
   frontend: # web 与日志采集器：允许向宿主机发布端口

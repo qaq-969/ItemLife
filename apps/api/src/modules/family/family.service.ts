@@ -5,6 +5,7 @@ import type { HouseholdDto, HouseholdInviteDto, HouseholdMemberDto } from '@item
 import { AuditService } from '../../common/audit/audit.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { bytesToUuid, newId, toIdBytes, type IdBytes } from '../../common/utils/id';
+import { deleteOwnerData } from '../../common/utils/delete-owner-data';
 import { seedPresetCategories } from '../categories/category-presets';
 import type {
   CreateHouseholdDto,
@@ -83,32 +84,7 @@ export class FamilyService {
     }
 
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const [items, transactions] = await Promise.all([
-        tx.item.findMany({ where: { ownerType: 'household', ownerId: id }, select: { id: true } }),
-        tx.transaction.findMany({ where: { ownerType: 'household', ownerId: id }, select: { id: true } }),
-      ]);
-      const itemIds = items.map((row) => row.id);
-      const transactionIds = transactions.map((row) => row.id);
-      const linkedRows = [
-        ...(itemIds.length ? [{ itemId: { in: itemIds } }] : []),
-        ...(transactionIds.length ? [{ transactionId: { in: transactionIds } }] : []),
-      ];
-
-      if (itemIds.length > 0) await tx.inventoryRevert.deleteMany({ where: { itemId: { in: itemIds } } });
-      if (linkedRows.length > 0) {
-        await tx.transactionItem.updateMany({ where: { OR: linkedRows }, data: { parentId: null } });
-        await tx.transactionItem.deleteMany({ where: { OR: linkedRows } });
-      }
-      if (itemIds.length > 0) {
-        await tx.accessoryUsage.deleteMany({ where: { itemId: { in: itemIds } } });
-        await tx.itemAccessory.deleteMany({ where: { itemId: { in: itemIds } } });
-        await tx.item.updateMany({ where: { id: { in: itemIds } }, data: { parentItemId: null, purchaseTransactionId: null } });
-        await tx.item.deleteMany({ where: { id: { in: itemIds } } });
-      }
-      if (transactionIds.length > 0) await tx.transaction.deleteMany({ where: { id: { in: transactionIds } } });
-      await tx.category.updateMany({ where: { ownerType: 'household', ownerId: id }, data: { parentId: null } });
-      await tx.category.deleteMany({ where: { ownerType: 'household', ownerId: id } });
-      await tx.account.deleteMany({ where: { ownerType: 'household', ownerId: id } });
+      await deleteOwnerData(tx, 'household', id);
       await tx.householdInvite.deleteMany({ where: { householdId: id } });
       await tx.householdMember.deleteMany({ where: { householdId: id } });
       await tx.household.deleteMany({ where: { id } });
