@@ -231,7 +231,7 @@ onMounted(() => { void load(); });
     <section v-if="data" class="card overflow-hidden">
       <div class="border-b border-line px-5 py-4">
         <h2 class="font-semibold">用户（{{ data.users.length }}）</h2>
-        <p class="mt-1 text-xs text-ink-3">停用可恢复并保留数据；永久删除会清除账号、个人账本及其创建的家庭账本</p>
+        <p class="mt-1 text-xs text-ink-3">用户停用后才可永久删除；停用可恢复并保留数据</p>
       </div>
       <div class="divide-y divide-line">
         <article v-for="user in data.users" :key="user.id" class="flex flex-wrap items-center gap-3 px-5 py-4">
@@ -254,7 +254,7 @@ onMounted(() => { void load(); });
               {{ user.disabledAt ? '恢复' : '停用' }}
             </button>
             <button v-if="isSuper" type="button" class="btn btn-ghost" :disabled="busy" @click="openPasswordReset(user)">重置密码</button>
-            <button v-if="isSuper" type="button" class="btn btn-ghost text-danger" :disabled="busy" @click="openDelete(user)">永久删除</button>
+            <button v-if="isSuper && user.disabledAt" type="button" class="btn btn-ghost text-danger" :disabled="busy" @click="openDelete(user)">永久删除</button>
           </div>
         </article>
       </div>
@@ -285,7 +285,7 @@ onMounted(() => { void load(); });
     </AppModal>
 
     <AppModal :open="deleteTarget !== null" title="永久删除用户" @close="deleteTarget = null">
-      <p class="text-sm leading-6 text-ink-2">此操作不可恢复。将永久删除账号、个人账本、物品，以及该用户创建的全部家庭账本；其在其他家庭创建的共享记录会保留，但不再显示创建者。</p>
+      <p class="text-sm leading-6 text-ink-2">该账户已经停用。继续操作将永久删除账号、个人账本、物品，以及该用户创建的全部家庭账本；其在其他家庭创建的共享记录会保留，但不再显示创建者。此操作不可恢复。</p>
       <label class="label mt-4 block" for="delete-site-user-confirm">输入“{{ deleteTarget?.email }}”确认</label>
       <input id="delete-site-user-confirm" v-model="deleteConfirmation" class="field mt-1 w-full" autocomplete="off" />
       <div class="mt-5 grid grid-cols-2 gap-2">

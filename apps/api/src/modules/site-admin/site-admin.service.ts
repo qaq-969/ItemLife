@@ -137,6 +137,9 @@ export class SiteAdminService {
   async deleteUser(userId: string, targetUserId: string): Promise<null> {
     await this.requireSuperAdmin(userId);
     const target = await this.requireMutableUser(userId, targetUserId);
+    if (!target.disabledAt) {
+      throw new ConflictException({ code: 'SITE_USER_NOT_DISABLED', message: '请先停用该用户，再执行永久删除' });
+    }
     await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const households = await tx.household.findMany({ where: { ownerUserId: target.id }, select: { id: true } });
       for (const household of households) {

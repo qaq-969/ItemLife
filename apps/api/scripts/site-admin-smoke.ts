@@ -133,8 +133,12 @@ async function main(): Promise<void> {
   check('重置后新密码可登录', resetLogin.status === 200, JSON.stringify(resetLogin.body));
   const forbiddenDelete = await request('DELETE', `/site/admin/users/${memberUser?.id}`, { token: adminToken });
   check('普通管理员不能永久删除用户', forbiddenDelete.status === 403 && forbiddenDelete.body?.code === 'SUPER_ADMIN_REQUIRED', JSON.stringify(forbiddenDelete.body));
+  const activeDelete = await request('DELETE', `/site/admin/users/${memberUser?.id}`, { token: ownerToken });
+  check('未停用用户不能永久删除', activeDelete.status === 409 && activeDelete.body?.code === 'SITE_USER_NOT_DISABLED', JSON.stringify(activeDelete.body));
+  const disabledBeforeDelete = await request('PATCH', `/site/admin/users/${memberUser?.id}/status`, { token: adminToken, body: { enabled: false } });
+  check('永久删除前可先停用用户', disabledBeforeDelete.status === 200 && typeof disabledBeforeDelete.body?.data?.disabledAt === 'string', JSON.stringify(disabledBeforeDelete.body));
   const deleted = await request('DELETE', `/site/admin/users/${memberUser?.id}`, { token: ownerToken });
-  check('超级管理员可永久删除其他用户', deleted.status === 200, JSON.stringify(deleted.body));
+  check('超级管理员可永久删除已停用用户', deleted.status === 200, JSON.stringify(deleted.body));
   const deletedLogin = await login('member@itemlife.local', resetPassword);
   check('永久删除后用户无法登录', deletedLogin.status === 401, JSON.stringify(deletedLogin.body));
   const afterDelete = await request('GET', '/site/admin', { token: ownerToken });

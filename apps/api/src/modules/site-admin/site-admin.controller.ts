@@ -73,7 +73,7 @@ export class SiteAdminController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @Delete('admin/users/:id')
-  @ApiOperation({ summary: '超级管理员永久删除其他用户及其个人和自有家庭数据' })
+  @ApiOperation({ summary: '超级管理员永久删除已停用用户及其个人和自有家庭数据' })
   deleteUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string): Promise<null> {
     return this.site.deleteUser(user.id, id);
   }
