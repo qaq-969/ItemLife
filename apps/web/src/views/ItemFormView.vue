@@ -183,7 +183,7 @@ async function submit(): Promise<void> {
 }
 
 onMounted(async () => {
-  await ledger.refresh().catch(() => undefined);
+  await ledger.ensureLoaded().catch(() => undefined);
   const id = route.params.id;
   if (typeof id === 'string' && id) {
     await loadForEdit(id);

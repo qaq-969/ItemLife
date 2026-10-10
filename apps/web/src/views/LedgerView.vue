@@ -310,7 +310,7 @@ async function remove(row: TransactionDto): Promise<void> {
 onMounted(async () => {
   if (typeof route.query.from === 'string') filters.from = route.query.from;
   if (typeof route.query.to === 'string') filters.to = route.query.to;
-  await Promise.all([ledger.refresh().catch(() => undefined), load()]);
+  await Promise.all([ledger.ensureLoaded().catch(() => undefined), load()]);
   if (typeof route.query.edit === 'string') {
     const target = items.value.find((row) => row.id === route.query.edit);
     if (target) openEdit(target);
