@@ -212,13 +212,13 @@
 <!-- ======================= 封面 ======================= -->
 <header class="cover">
   <div class="cover-inner">
-    <span class="badge">SYSTEM DESIGN REPORT · 待评审</span>
+    <span class="badge">SYSTEM DESIGN REPORT · M1–M5 已实施</span>
     <h1>ItemLife · 物品化家庭记账平台<br>系统设计报告</h1>
     <p class="sub">前后端分离 · 容器化部署 · 面向手机 / 平板 / 桌面全尺寸设备的响应式 Web 应用</p>
     <div class="meta">
       <span>版本：<b>v1.0</b></span>
-      <span>日期：<b>2026-09-18</b></span>
-      <span>状态：<b>待评审</b></span>
+      <span>更新：<b>2026-10-04</b></span>
+      <span>状态：<b>M1–M5 已实施</b></span>
       <span>技术栈：<b>Vue 3 + NestJS + MySQL 8</b></span>
       <span>部署：<b>Docker Compose</b></span>
     </div>
@@ -252,6 +252,10 @@
 
   <main>
 
+  <section>
+    <div class="callout info"><strong>文档口径：</strong>本文保留完整架构论证；当前产品行为、交互细节和验收条件以 <a href="current-requirements.md">current-requirements.md</a> 为优先基线。</div>
+  </section>
+
   <!-- ======================= 1. 项目概述 ======================= -->
   <section id="s1">
     <h2><span class="no">01</span>项目概述</h2>
@@ -263,7 +267,7 @@
     <div class="grid g3">
       <div class="cell">
         <h5><span class="num" style="background:var(--c-primary)">记</span>记账</h5>
-        <p>账户资产余额管理、自定义分类、收入 / 支出 / 转账、消费与储蓄趋势看板。</p>
+        <p>账户资产余额管理、自定义分类、收入 / 支出 / 转账、收支与总资产趋势看板。</p>
       </div>
       <div class="cell">
         <h5><span class="num" style="background:var(--c-green)">物</span>物品</h5>
@@ -292,8 +296,8 @@
           <tr><td>邮箱注册登录、TOTP 两步验证、恢复码</td><td>第三方登录（微信 / GitHub OAuth）</td></tr>
           <tr><td>账户 / 分类 / 收支转账记账、资产余额、账户利息自动计算</td><td>银行账单自动导入、多币种界面与实时汇率（v1.0 仅 CNY，数据模型与转换接口已预留，见 5.4）</td></tr>
           <tr><td>物品-支出关联、配件库存、成本看板</td><td>物品图片 OCR 识别、保修到期提醒推送</td></tr>
-          <tr><td>邀请码家庭、个人 / 家庭数据域切换</td><td>家庭预算、审批流、成员权限细分</td></tr>
-          <tr><td>消费 / 储蓄 / 收益趋势看板（收益含自动结息利息）</td><td>原生 App（iOS / Android）、桌面客户端</td></tr>
+          <tr><td>邀请码家庭、创建者/管理员/成员权限、家庭删改、个人 / 家庭数据域切换</td><td>家庭预算、审批流、创建者转让、自定义权限角色</td></tr>
+          <tr><td>收入 / 支出 / 总资产趋势看板（总资产按账户余额沿流水回溯）</td><td>原生 App（iOS / Android）、桌面客户端</td></tr>
         </tbody>
       </table>
     </div>
@@ -320,9 +324,9 @@
           <tr><td>FR-10</td><td>物品</td><td>成本多视角展示：总支付金额、当前持有成本、日均持有成本（核心三指标）+ 剩余配件价值；详情页必须完整展示全部指标</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-11</td><td>物品</td><td>记账时可关联 1～N 个物品并逐个指定分摊金额；单物品省略金额时继承流水全额（购买物品 / 配件 / 维修等）</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-12</td><td>物品</td><td>「物品」看板：物品总览、总投入、按类别统计、高成本物品排行</td><td><span class="tag tag-rec">P1</span></td></tr>
-          <tr><td>FR-13</td><td>家庭</td><td>创建家庭、生成邀请码（有效期 + 使用次数限制）、凭码加入、退出 / 移除成员</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-13</td><td>家庭</td><td>创建/改名/删除家庭、邀请码加入、创建者/管理员/成员三级权限、退出与成员管理</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-14</td><td>家庭</td><td>添加记账 / 物品时选择归属：个人 或 某个家庭；列表按数据域筛选</td><td><span class="tag tag-rec">P0</span></td></tr>
-          <tr><td>FR-15</td><td>看板</td><td>趋势看板：消费金额、储蓄额度、收益（含自动结息利息）趋势；时间粒度（日 / 周 / 月）</td><td><span class="tag tag-rec">P0</span></td></tr>
+          <tr><td>FR-15</td><td>看板</td><td>“收支与总资产趋势”同时展示全部收入、全部支出和期末总资产三条曲线；时间粒度（日 / 周 / 月）</td><td><span class="tag tag-rec">P0</span></td></tr>
           <tr><td>FR-16</td><td>看板</td><td>分类占比、账户余额分布、收支对比、同环比</td><td><span class="tag tag-rec">P1</span></td></tr>
           <tr><td>FR-17</td><td>记账</td><td>账户利息自动计算：账户可配置年化利率与结息周期，按日计息、周期入账（幂等防重），支持手动结息</td><td><span class="tag tag-rec">P1</span></td></tr>
           <tr><td>FR-18</td><td>设置</td><td>个人资料、修改密码（需二次验证）、MFA 开启 / 重绑 / 关闭、恢复码重置</td><td><span class="tag tag-rec">P0</span></td></tr>
@@ -372,18 +376,18 @@
           </tr>
           <tr>
             <td>UI / 样式</td>
-            <td><strong>Tailwind CSS</strong> + Radix Vue（无头组件）<span class="tag tag-rec">推荐</span></td>
-            <td>断点前缀（<code>sm: md: lg:</code>）天然适合移动优先的响应式改造；不绑定某套桌面或移动组件库，避免「桌面组件库在手机上水土不服」。复杂交互（弹层 / 抽屉 / 日期选择）用无头组件保证可访问性。</td>
+            <td><strong>Tailwind CSS</strong> + 项目内无头组件<span class="tag tag-rec">已采用</span></td>
+            <td>断点前缀（<code>sm: md: lg:</code>）用于移动优先响应式布局；下拉、日期时间和弹层由 <code>AppSelect</code> / <code>AppDateTimePicker</code> / <code>AppModal</code> 自实现。日期时间选择锚定字段以下拉面板展开，弹窗统一遮罩和动画行为，不调用系统日期控件。</td>
           </tr>
           <tr>
             <td>状态 / 数据</td>
-            <td>Pinia + TanStack Query (Vue Query)</td>
-            <td>Pinia 管会话与 UI 状态；Query 管服务端数据缓存、失效重取、乐观更新（记账后看板自动刷新）。</td>
+            <td>Pinia + Axios（预留 TanStack Query）</td>
+            <td>Pinia 管会话、数据域与账本缓存；页面通过 Axios 并发拉取服务端数据，写入后显式刷新。当前数据量下保持状态路径简单。</td>
           </tr>
           <tr>
             <td>图表</td>
-            <td><strong>ECharts</strong>（按需引入）</td>
-            <td>移动端触摸交互成熟、大数据量性能好、中文文档完善；按需注册组件控制包体积。</td>
+            <td><strong>ECharts</strong>（路由内延迟加载）</td>
+            <td>进入看板或物品详情时再加载图表代码，首屏不阻塞；同时提供表格替代视图，兼顾移动端与可访问性。</td>
           </tr>
           <tr>
             <td>后端框架</td>
@@ -403,7 +407,7 @@
           <tr>
             <td>缓存 / 限流</td>
             <td>Redis 7 + <code>@nestjs/throttler</code></td>
-            <td>登录限流、TOTP 防重放时间窗、刷新令牌吊销名单、看板聚合结果短缓存。</td>
+            <td>登录限流、TOTP 防重放时间窗、刷新令牌与幂等键状态；看板 v1 直接聚合以保证写入后立即一致。</td>
           </tr>
           <tr>
             <td>Web 服务器</td>
@@ -494,7 +498,7 @@
         <text x="280" y="524" font-size="11" fill="#64748b" text-anchor="middle">持久化数据卷 mysql_data · 单实例 · 内网隔离</text>
         <rect x="470" y="482" width="300" height="56" rx="10" fill="#fff" stroke="#cbd5e1"/>
         <text x="620" y="506" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">Redis 7（AOF 持久化）</text>
-        <text x="620" y="524" font-size="11" fill="#64748b" text-anchor="middle">限流 · 令牌吊销 · 看板缓存</text>
+        <text x="620" y="524" font-size="11" fill="#64748b" text-anchor="middle">限流 · MFA 临时态 · 幂等键</text>
         <!-- 内网标注 -->
         <text x="450" y="556" font-size="11" fill="#94a3b8" text-anchor="middle">内网 Docker 网络 backend：仅 Nginx 暴露 :80，MySQL / Redis 不对外</text>
       </svg>
@@ -677,8 +681,8 @@
       <table>
         <thead><tr><th style="width:180px">字段</th><th style="width:150px">类型</th><th>说明</th></tr></thead>
         <tbody>
-          <tr><td colspan="3"><strong>households</strong>：<code>id</code> PK · <code>name</code> VARCHAR(40) 家庭名 · <code>owner_id</code> FK→users 家庭创建者 · <code>created_at</code></td></tr>
-          <tr><td colspan="3"><strong>household_members</strong>：<code>household_id</code> + <code>user_id</code> 复合唯一 · <code>role</code> ENUM('owner','member') · <code>joined_at</code></td></tr>
+          <tr><td colspan="3"><strong>households</strong>：<code>id</code> PK · <code>name</code> VARCHAR(50) 家庭名 · <code>owner_user_id</code> FK→users 家庭创建者 · <code>created_at</code></td></tr>
+          <tr><td colspan="3"><strong>household_members</strong>：<code>household_id</code> + <code>user_id</code> 复合唯一 · <code>role</code> ENUM('owner','admin','member') · <code>joined_at</code></td></tr>
           <tr><td colspan="3"><strong>household_invites</strong>：<code>id</code> · <code>household_id</code> FK · <code>code_hash</code> CHAR(64) <strong>邀请码哈希</strong> · <code>expires_at</code>（默认 72 小时） · <code>max_uses</code> / <code>used_count</code> · <code>created_by</code></td></tr>
         </tbody>
       </table>
@@ -838,7 +842,7 @@
         <thead><tr><th style="width:80px">方法</th><th style="width:290px">路径</th><th>说明</th><th style="width:120px">认证</th></tr></thead>
         <tbody>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">认证与 MFA（模块 Auth）</td></tr>
-          <tr><td>POST</td><td><code>/auth/register</code></td><td>注册：邮箱 + 密码，密码强度与泄露检查，Argon2id 入库</td><td>公开 · 限流</td></tr>
+          <tr><td>POST</td><td><code>/auth/register</code></td><td>注册：首位用户成为超级管理员；关闭公开注册后必须提交 8 位单次邀请码</td><td>公开 · 限流</td></tr>
           <tr><td>POST</td><td><code>/auth/login</code></td><td>第一步：校验密码 → 若已开 MFA 返回 <code>mfa_required</code> 短期票据</td><td>公开 · 限流</td></tr>
           <tr><td>POST</td><td><code>/auth/mfa/verify</code></td><td>第二步：校验 TOTP / 恢复码 → 签发正式令牌对</td><td>mfa 票据</td></tr>
           <tr><td>POST</td><td><code>/auth/mfa/setup</code></td><td>生成 TOTP 密钥 + otpauth 二维码（仅绑定前临时存于服务端）</td><td>JWT</td></tr>
@@ -847,6 +851,13 @@
           <tr><td>POST</td><td><code>/auth/token/refresh</code></td><td>刷新令牌旋转：旧令牌吊销，检测盗用则整族吊销</td><td>Cookie</td></tr>
           <tr><td>POST</td><td><code>/auth/logout</code> / <code>/auth/logout-all</code></td><td>登出当前设备 / 全部设备</td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/auth/sessions</code></td><td>登录设备列表（脱敏 UA/IP）与远程下线</td><td>JWT</td></tr>
+          <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">站点管理（模块 SiteAdmin）</td></tr>
+          <tr><td>GET</td><td><code>/site/status</code></td><td>公开读取注册开关与站点是否已初始化</td><td>公开</td></tr>
+          <tr><td>GET</td><td><code>/site/admin</code></td><td>读取站点设置、用户与最近邀请码</td><td>JWT · 管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/registration</code></td><td>开启或关闭公开注册</td><td>JWT · 超级管理员</td></tr>
+          <tr><td>POST/DELETE</td><td><code>/site/admin/invites[/:id]</code></td><td>关闭注册时生成 7 天单次邀请码 / 撤销邀请码</td><td>JWT · 管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/users/:id/role</code></td><td>授予或移除站点管理员权限</td><td>JWT · 超级管理员</td></tr>
+          <tr><td>PATCH</td><td><code>/site/admin/users/:id/status</code></td><td>停用或恢复普通用户；停用保留数据并撤销会话</td><td>JWT · 管理员</td></tr>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">记账（模块 Ledger）</td></tr>
           <tr><td>GET/POST</td><td><code>/accounts</code></td><td>资产账户列表（含派生余额与计息配置）/ 新建</td><td>JWT</td></tr>
           <tr><td>PATCH/DELETE</td><td><code>/accounts/:id</code></td><td>编辑（含利息配置：年化利率、结息周期）/ 归档 / 删除（无流水时才可删）</td><td>JWT · 属主校验</td></tr>
@@ -860,18 +871,21 @@
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">物品与配件（模块 Item）</td></tr>
           <tr><td>GET/POST</td><td><code>/items</code></td><td>物品列表（含成本指标）/ 新建物品</td><td>JWT</td></tr>
           <tr><td>GET/PATCH/DELETE</td><td><code>/items/:id</code></td><td>物品详情（成本详情 + 关联流水 + 配件）/ 编辑 / 删除</td><td>JWT · 属主校验</td></tr>
-          <tr><td>POST</td><td><code>/items/:id/accessories</code></td><td>添加配件批次（名称、单价、总数、购入日期）</td><td>JWT</td></tr>
+          <tr><td>DELETE</td><td><code>/accessories/:id</code></td><td>删除配件批次并同步扣减来源流水；配件只允许从“记一笔”的附加物品创建</td><td>JWT · 属主校验</td></tr>
           <tr><td>POST</td><td><code>/accessories/:id/consume</code></td><td>消耗 <code>{qty: 1}</code> 个配件（used_qty + n，不可超过剩余）</td><td>JWT</td></tr>
           <tr><td>POST</td><td><code>/accessories/:id/restore</code></td><td>撤销消耗（used_qty - n，不可小于 0）</td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/items/overview</code></td><td>「物品」看板：总投入、在役物品数、配件库存价值、成本排行</td><td>JWT</td></tr>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">家庭（模块 Family）</td></tr>
           <tr><td>GET/POST</td><td><code>/households</code></td><td>我的家庭列表 / 创建家庭</td><td>JWT</td></tr>
-          <tr><td>POST</td><td><code>/households/:id/invites</code></td><td>生成邀请码（有效期、最大使用次数）</td><td>JWT · owner</td></tr>
+          <tr><td>PATCH/DELETE</td><td><code>/households/:id</code></td><td>修改家庭名称 / 输入完整名称后永久删除家庭数据</td><td>JWT · owner</td></tr>
+          <tr><td>POST</td><td><code>/households/:id/invites</code></td><td>生成邀请码（有效期、最大使用次数）</td><td>JWT · owner/admin</td></tr>
+          <tr><td>GET/DELETE</td><td><code>/households/:id/invites[/:inviteId]</code></td><td>查看邀请状态 / 使邀请码立即失效（列表不返回明文）</td><td>JWT · owner/admin</td></tr>
           <tr><td>POST</td><td><code>/households/join</code></td><td>凭邀请码加入家庭</td><td>JWT · 限流</td></tr>
-          <tr><td>GET/DELETE</td><td><code>/households/:id/members[/:uid]</code></td><td>成员列表 / 移除成员（owner）/ 成员自行退出</td><td>JWT · 属主校验</td></tr>
+          <tr><td>GET/PATCH/DELETE</td><td><code>/households/:id/members[/:uid]</code></td><td>成员列表 / owner 任免管理员 / owner 或 admin 移除其权限范围内的成员 / 自行退出</td><td>JWT · 角色校验</td></tr>
           <tr><td colspan="4" style="background:#f8fafc;font-weight:700;color:var(--c-text)">看板与设置（模块 Dashboard / User）</td></tr>
-          <tr><td>GET</td><td><code>/dashboard/trend</code></td><td>趋势数据：<code>?domain=&amp;metric=expense|saving|income|interest|net_worth&amp;granularity=day|week|month&amp;from=&amp;to=</code></td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/dashboard/trend</code></td><td>返回收入 / 支出 / 总资产趋势及储蓄、收益扩展数据：<code>?domain=&amp;granularity=day|week|month&amp;from=&amp;to=</code></td><td>JWT</td></tr>
           <tr><td>GET</td><td><code>/dashboard/breakdown</code></td><td>分类占比 / 账户分布 / 环比同比</td><td>JWT</td></tr>
+          <tr><td>GET</td><td><code>/dashboard/overview</code></td><td>消费 / 储蓄 / 收益 / 净值、上一等长周期对比与物品投入</td><td>JWT</td></tr>
           <tr><td>GET/PATCH</td><td><code>/users/me</code></td><td>个人资料查看 / 修改昵称</td><td>JWT</td></tr>
           <tr><td>POST</td><td><code>/users/me/password</code></td><td>修改密码（旧密码 + TOTP 双验证，改后吊销全部会话）</td><td>JWT · 强验证</td></tr>
           <tr><td>GET</td><td><code>/users/me/preferences</code></td><td>用户偏好（默认数据域、主题、货币符号等）</td><td>JWT</td></tr>
@@ -1003,7 +1017,7 @@
       </div>
       <div class="cell">
         <h5>Refresh Token</h5>
-        <p>HttpOnly + Secure + SameSite=Lax Cookie，仅 <code>/api/v1/auth</code> 路径可见；14 天有效；<strong>每次刷新即轮换</strong>（旧令牌立即吊销）；检测到已吊销令牌被复用 → 整族吊销并强制重新登录（令牌盗用响应）。</p>
+        <p>HttpOnly + SameSite=Lax Cookie，仅 <code>/api/v1/auth</code> 路径可见，HTTPS 链路自动启用 Secure；14 天有效；<strong>每次刷新即轮换</strong>（旧令牌立即吊销）。多标签页或 Safari 页面恢复造成的合法并发刷新有 30 秒宽限并自动重试；宽限期后检测到旧令牌复用 → 整族吊销并强制重新登录（令牌盗用响应）。</p>
       </div>
       <div class="cell">
         <h5>TOTP 防重放</h5>
@@ -1089,27 +1103,27 @@
       <li>一笔流水可关联 <strong>1～N 个物品</strong>，关联与分摊统一走 <code>transaction_items</code> 表（见 5.2 ⑧），每个物品可单独指定分摊金额；</li>
       <li><strong>单物品简化写法：</strong>不填分摊金额时 <code>amount_minor = NULL</code>，表示继承整笔流水金额（仅单物品场景允许）；</li>
       <li><strong>未分摊差额：</strong>Σ分摊金额 ≤ 流水金额，差额在流水详情页单独标注「未分摊」（如 100 元流水仅分摊 30 + 20，剩余 ¥50 为未分摊）；</li>
-      <li>新建物品时可直接生成一条关联支出流水（分摊金额 = 本体价），也可事后关联已有流水；</li>
-      <li>购买配件 = 一条支出流水（分摊指向该物品）+ 在 <code>item_accessories</code> 增加一批库存；</li>
-      <li>数据一致性：成本指标由「物品本体价 + 配件表」直接计算（不重复累加流水），流水仅用于展示与对账，避免双重计数。</li>
+      <li>新建物品统一从“记一笔”的物品清单创建；物品页只负责查看、状态和库存管理；</li>
+      <li>购买配件 = 一条支出流水中的附加物品分摊 + 在 <code>item_accessories</code> 增加一批库存；</li>
+      <li>数据一致性：成本金额以流水分摊为权威来源，配件表承载数量和单件分配；删除任一侧都同步调整另一侧。</li>
     </ul>
 
     <h3>8.3 家庭与数据域（个人 / 家庭）</h3>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th style="width:150px">能力</th><th style="width:110px">Owner（创建者）</th><th style="width:110px">Member（成员）</th><th>说明</th></tr></thead>
+        <thead><tr><th style="width:150px">能力</th><th style="width:100px">创建者</th><th style="width:100px">管理员</th><th style="width:100px">成员</th><th>说明</th></tr></thead>
         <tbody>
-          <tr><td>查看家庭账本 / 物品</td><td>✅</td><td>✅</td><td>成员对家庭数据域全量可见</td></tr>
-          <tr><td>记家庭账 / 建家庭物品</td><td>✅</td><td>✅</td><td>记录人写入 <code>created_by</code> 可追溯</td></tr>
-          <tr><td>编辑他人记录</td><td>✅</td><td>✅</td><td>家庭账本协作优先（v1.0 简化模型）</td></tr>
-          <tr><td>生成邀请码</td><td>✅</td><td>❌</td><td>仅创建者</td></tr>
-          <tr><td>移除成员 / 解散家庭</td><td>✅</td><td>❌</td><td>Owner 专属</td></tr>
-          <tr><td>退出家庭</td><td>—</td><td>✅</td><td>退出后历史记录保留（created_by 仍指向本人）</td></tr>
+          <tr><td>查看和维护家庭账本 / 物品</td><td>✅</td><td>✅</td><td>✅</td><td>记录人写入 <code>created_by</code> 可追溯</td></tr>
+          <tr><td>生成 / 撤销邀请码</td><td>✅</td><td>✅</td><td>❌</td><td>管理员承担日常成员邀请</td></tr>
+          <tr><td>移除普通成员</td><td>✅</td><td>✅</td><td>❌</td><td>管理员不能管理其他管理员</td></tr>
+          <tr><td>任免管理员</td><td>✅</td><td>❌</td><td>❌</td><td>仅创建者</td></tr>
+          <tr><td>修改 / 永久删除家庭</td><td>✅</td><td>❌</td><td>❌</td><td>删除需输入完整家庭名称确认</td></tr>
+          <tr><td>退出家庭</td><td>—</td><td>✅</td><td>✅</td><td>退出后家庭历史记录保留</td></tr>
         </tbody>
       </table>
     </div>
     <ul>
-      <li><strong>数据域切换：</strong>顶部提供「个人 | 家庭」分段控件；记账 / 建物品时默认沿用上次选择，可在表单内随时切换归属；</li>
+      <li><strong>数据域切换：</strong>应用外壳提供全局自定义选择器，列出个人账本与用户加入的全部家庭；选择持久化到本机，账户 / 分类 / 流水 / 记一笔 / 物品 / 看板统一沿用；</li>
       <li><strong>邀请码规则：</strong>8 位大写字母数字（排除易混淆字符 0/O/1/I），默认 72 小时有效、最多 5 次使用；哈希存储，过期或超额自动失效；</li>
       <li><strong>家庭×个人数据隔离：</strong>个人流水永远不会出现在家庭视图中（除非用户主动「重新归属」，该操作记入审计日志）。</li>
     </ul>
@@ -1119,10 +1133,11 @@
       <table>
         <thead><tr><th style="width:150px">指标</th><th style="width:270px">定义</th><th>可视化</th></tr></thead>
         <tbody>
-          <tr><td>消费金额</td><td>区间内 <code>type=expense</code> 求和</td><td>折线 / 柱状趋势（日 / 周 / 月粒度），可叠加分类堆叠</td></tr>
+          <tr><td>支出</td><td>区间内 <code>type=expense</code> 求和</td><td>“收支与总资产趋势”统一金额轴折线（日 / 周 / 月粒度）</td></tr>
+          <tr><td>收入</td><td>区间内 <code>type=income</code> 求和</td><td>“收支与总资产趋势”统一金额轴折线（日 / 周 / 月粒度）</td></tr>
           <tr><td>储蓄额度</td><td>区间内 收入 − 支出（净结余）</td><td>面积折线 + 目标线；按月对比柱状</td></tr>
           <tr><td>收益</td><td>分类带 <code>system_tag=investment_return</code> 的收入 + 自动结息流水（<code>system_tag=interest</code>，见 8.5）合计</td><td>独立折线 + 累计收益曲线</td></tr>
-          <tr><td>资产净值</td><td>Σ 全部账户余额（沿时间回溯）</td><td>净值曲线（资产 vs 负债双线）</td></tr>
+          <tr><td>总资产</td><td>Σ 全部账户余额（沿流水按时间回溯）</td><td>与收入、支出共用统一金额轴的折线</td></tr>
           <tr><td>分类占比</td><td>区间内按分类聚合</td><td>环形图 + Top10 排行</td></tr>
           <tr><td>同比 / 环比</td><td>与上一周期对比</td><td>涨跌徽章 + 差值标注</td></tr>
         </tbody>
@@ -1130,8 +1145,8 @@
     </div>
     <ul>
       <li>看板同时支持「个人 / 家庭」数据域与「全部 / 单账户」筛选；</li>
-      <li>查询按 <code>(owner, 时间段)</code> 聚合，MySQL 窗口函数实现月环比；结果在 Redis 缓存 60 秒（记账操作触发失效）；</li>
-      <li>默认展示近 12 个月；移动端图表支持双指缩放（ECharts dataZoom）。</li>
+      <li>查询按 <code>(owner, 时间段)</code> 直接聚合，并使用上一等长周期计算环比；v1.0 优先保证记账后立即一致，数据量增长后再引入版本化 Redis 缓存；</li>
+      <li>默认展示本月，可切换近 3 个月或近 12 个月，并按日 / 周 / 月调整粒度；移动端图表随容器宽度自适应。</li>
     </ul>
 
     <h3>8.5 账户利息自动计算 <span class="tag tag-info">增强</span></h3>
@@ -1255,7 +1270,7 @@
                 <div class="blk" style="flex-direction:column"><b>净资产</b>¥86,400</div>
               </div>
               <div class="wf-row" style="grid-template-columns:2fr 1fr">
-                <div class="blk tall" style="min-height:110px">消费 / 储蓄趋势折线（月粒度 · 可切日/周）</div>
+                <div class="blk tall" style="min-height:110px">收入 / 支出 / 总资产趋势折线（月粒度 · 可切日/周）</div>
                 <div class="blk tall" style="min-height:110px">分类占比环形图</div>
               </div>
               <div class="wf-row" style="grid-template-columns:1fr 1fr">
@@ -1438,9 +1453,9 @@
     <ol>
       <li>目标机器安装 Docker Engine + Compose 插件（Windows / macOS 用 Docker Desktop，Linux 用发行版包）；</li>
       <li>复制 <code>.env.example → .env</code>，填写数据库口令、JWT 密钥、AES 密钥（脚本 <code>make gen-secrets</code> 可自动生成随机值）；</li>
-      <li><code>docker compose up -d --build</code> → 拉取基础镜像、构建 web/api、启动 4 个服务；</li>
+      <li>常规源码部署使用 <code>docker compose up -d --build</code>；NAS 交付包包含完整构建上下文，可在 NAS UI 中仅执行 <code>docker compose up -d</code>，首次启动会自动构建 web/api 并启动 4 个服务；</li>
       <li>api 容器 entrypoint：等待 MySQL 健康 → <code>prisma migrate deploy</code> 建表 → 启动服务（需写入预置分类时设 <code>SEED_ON_START=1</code>，生产建议保持 0）；</li>
-      <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，按引导开启 MFA。</li>
+      <li>浏览器访问 <code>http://&lt;主机IP&gt;/</code>（内网直连）或经外部反向代理的域名（公网）；注册第一个账号，该账号自动成为超级管理员，再按引导开启 MFA。</li>
     </ol>
 
     <h3>10.5 内网部署与外部反向代理对接 <span class="tag tag-info">已确认</span></h3>
@@ -1571,13 +1586,13 @@
             <td>录入「牙刷 + 12 刷头用 2 个」用例后，总支付 / 当前持有成本 / 日均持有成本与第 8.2 节公式完全一致；配件消耗有审计记录</td>
           </tr>
           <tr>
-            <td><strong>M4</strong><br>家庭协作</td>
-            <td>创建家庭、邀请码生成 / 加入 / 失效、成员管理、个人 / 家庭数据域切换</td>
-            <td>两账号可组成家庭并共享账本与物品；个人数据在家庭视图不可见；邀请码过期后无法使用</td>
+            <td><strong>M4</strong><br>家庭协作<br><span class="tag tag-rec">已完成</span></td>
+            <td>家庭创建 / 改名 / 事务删除、三级角色、邀请码、成员管理、个人 / 家庭数据域切换</td>
+            <td>创建者可任免管理员；管理员管理邀请和普通成员；删除家庭完整清理账务与物品；个人与家庭数据严格隔离</td>
           </tr>
           <tr>
-            <td><strong>M5</strong><br>看板</td>
-            <td>消费 / 储蓄 / 收益（含自动结息）/ 净值趋势、分类占比、同环比、物品投入统计</td>
+            <td><strong>M5</strong><br>看板<br><span class="tag tag-rec">已完成</span></td>
+            <td>收入 / 支出 / 总资产趋势、分类占比、同环比、收益与物品投入统计</td>
             <td>看板数字与流水手工核算一致；三档设备上图表可读、交互流畅</td>
           </tr>
           <tr>
@@ -1644,7 +1659,7 @@
           <tr><td>用户丢失手机 + 恢复码 → 无法登录</td><td><span class="tag tag-q">中</span></td><td>文档明确恢复码保管责任；v1.1 可加「备用邮箱重置」流程</td></tr>
           <tr><td>看板聚合查询随数据量增长的性能</td><td><span class="tag tag-ok" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0">低</span></td><td>个人 / 家庭记账量级（万级流水）MySQL 索引完全够用；预留日快照表与 Redis 缓存方案</td></tr>
           <tr><td>单机部署无高可用</td><td><span class="tag tag-ok" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0">低</span></td><td>自托管场景接受；备份 + 快速重建即可满足 RPO</td></tr>
-          <tr><td>Tailwind + 自研组件的表单 / 日期组件开发量</td><td><span class="tag tag-q">中</span></td><td>日期 / 弹层等复杂件用 Radix Vue 无头组件补齐，避免从头造轮子</td></tr>
+          <tr><td>Tailwind + 自研组件的表单 / 日期组件开发量</td><td><span class="tag tag-q">中</span></td><td>复用项目内 <code>AppSelect</code>、<code>AppModal</code> 与统一字段样式；新增复杂控件前先验证原生与现有组件能否满足。</td></tr>
         </tbody>
       </table>
     </div>
@@ -1676,7 +1691,7 @@
 </div>
 
 <footer>
-  <p>ItemLife · 系统设计报告 v1.0 · 2026-09-18 · 状态：待评审 · 生成者：Qoder</p>
+  <p>ItemLife · 系统设计报告 v1.2 · 2026-10-04 · 状态：M1–M5 已实现并完成离线验收</p>
 </footer>
 
 <button id="top-btn" title="返回顶部" aria-label="返回顶部">↑</button>

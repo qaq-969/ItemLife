@@ -1,0 +1,21 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 10+ 默认阻止依赖执行安装脚本；以下依赖需要构建原生模块或生成产物
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@tailwindcss/oxide': true
+  argon2: true
+  esbuild: true
+  prisma: true
+  unrs-resolver: true
+  vue-demi: true
+  # 遥测组件，不需要执行安装脚本
+  '@scarf/scarf': false
+
+# 供应链延迟发布保护的例外：@tanstack 系列（pnpm 自动登记，避免降级到旧版本）
+minimumReleaseAgeExclude:
+  - '@tanstack/query-core@5.103.2'
+  - '@tanstack/vue-query@5.103.2'

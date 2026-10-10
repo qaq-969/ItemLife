@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ItemLife「设置 / 我的」统一方案报告</title>
+  <style>
+    :root { --brand:#5146e5; --soft:#eef2ff; --ink:#172033; --muted:#667085; --line:#dfe3ea; --bg:#f5f7fb; --good:#087f5b; --warn:#b54708; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif; }
+    main { width:min(1120px,calc(100% - 32px)); margin:32px auto 64px; }
+    h1,h2,h3,p { margin-top:0; } h1 { font-size:30px; line-height:1.25; } h2 { margin:34px 0 14px; font-size:21px; } h3 { margin-bottom:8px; font-size:16px; }
+    .hero,.card { border:1px solid var(--line); border-radius:18px; background:#fff; box-shadow:0 8px 30px rgba(23,32,51,.04); }
+    .hero { padding:28px; } .card { padding:20px; } .muted { color:var(--muted); } .lead { max-width:850px; font-size:17px; }
+    .tag { display:inline-flex; padding:3px 9px; border-radius:999px; background:var(--soft); color:var(--brand); font-size:12px; font-weight:700; }
+    .grid { display:grid; gap:16px; } .g2 { grid-template-columns:repeat(2,minmax(0,1fr)); } .g3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    table { width:100%; border-collapse:collapse; overflow:hidden; border-radius:14px; background:#fff; }
+    th,td { padding:12px 14px; border:1px solid var(--line); text-align:left; vertical-align:top; } th { background:#f8fafc; font-size:13px; }
+    ul,ol { margin:8px 0 0; padding-left:20px; } li+li { margin-top:6px; }
+    .verdict { border-left:4px solid var(--brand); background:var(--soft); }
+    .risk { color:var(--warn); font-weight:700; } .good { color:var(--good); font-weight:700; }
+    .nav-demo { display:grid; grid-template-columns:190px 1fr; min-height:390px; overflow:hidden; border:1px solid var(--line); border-radius:16px; background:#fff; }
+    .side { padding:16px 12px; border-right:1px solid var(--line); background:#fbfcff; } .logo { margin:0 8px 16px; font-weight:800; }
+    .nav-item { margin:4px 0; padding:10px 12px; border-radius:9px; color:var(--muted); } .nav-item.on { background:var(--soft); color:var(--brand); font-weight:700; }
+    .hub { padding:22px; } .profile { margin-bottom:16px; padding:16px; border:1px solid var(--line); border-radius:13px; }
+    .group { margin-top:12px; padding:14px; border:1px solid var(--line); border-radius:13px; } .row { display:flex; justify-content:space-between; gap:12px; padding:9px 0; } .row+.row { border-top:1px solid var(--line); }
+    .phone { width:min(370px,100%); margin:auto; overflow:hidden; border:1px solid var(--line); border-radius:24px; background:#fff; box-shadow:0 14px 36px rgba(23,32,51,.08); }
+    .phone-head { padding:14px 18px; border-bottom:1px solid var(--line); font-weight:700; } .phone-body { padding:16px; } .phone-tabs { display:grid; grid-template-columns:repeat(5,1fr); border-top:1px solid var(--line); color:var(--muted); font-size:12px; text-align:center; } .phone-tabs span { padding:12px 2px; } .phone-tabs .on { color:var(--brand); font-weight:700; }
+    code { padding:2px 6px; border-radius:5px; background:#f1f3f7; font-size:13px; }
+    .step { position:relative; padding-left:42px; } .step::before { position:absolute; left:0; top:0; display:grid; width:28px; height:28px; place-items:center; border-radius:50%; background:var(--brand); color:#fff; content:attr(data-step); font-weight:800; }
+    @media (max-width:760px) { main { margin-top:16px; } .hero { padding:21px; } .g2,.g3 { grid-template-columns:1fr; } .nav-demo { grid-template-columns:1fr; } .side { display:none; } h1 { font-size:25px; } table { font-size:13px; } th,td { padding:9px; } }
+  </style>
+</head>
+<body>
+<main>
+  <section class="hero">
+    <span class="tag">结构调研 · 2026-10-05</span>
+    <h1 style="margin-top:12px">“设置”与“我的”统一方案</h1>
+    <p class="lead muted">目标是让用户只记住一个个人管理入口，同时保证账户、分类、家庭、安全和站点管理最多两次点击可达，并让桌面端与移动端采用同一套信息结构。</p>
+  </section>
+
+  <h2>结论</h2>
+  <section class="card verdict">
+    <h3>建议保留“我的”，撤销独立“设置”主导航</h3>
+    <p>“我的”升级为统一管理中心；桌面侧栏保留高频的“家庭”入口，移动底栏保持五项结构和凸起的“记一笔”图标。账户、分类、家庭、安全、站点管理按任务分组呈现，原 <code>/settings</code> 页面和路由直接移除；业务接口与数据库结构保持兼容。</p>
+  </section>
+
+  <h2>现状与重复来源</h2>
+  <div class="grid g2">
+    <section class="card">
+      <h3>桌面端</h3>
+      <ul>
+        <li>侧栏同时出现“家庭”“设置”“我的”“站点管理”。</li>
+        <li>“设置”包含账户管理、分类管理、账号安全。</li>
+        <li>“我的”再次包含站点管理、账号安全、家庭、账户与分类设置。</li>
+      </ul>
+    </section>
+    <section class="card">
+      <h3>移动端</h3>
+      <ul>
+        <li>底部导航只有“我的”，没有“设置”和“家庭”。</li>
+        <li>用户必须经“我的”进入管理功能，实际已形成管理中心。</li>
+        <li>同一功能在桌面和手机上的路径与命名不同。</li>
+      </ul>
+    </section>
+  </div>
+
+  <table style="margin-top:16px">
+    <thead><tr><th>功能</th><th>桌面当前入口</th><th>移动当前入口</th><th>主要问题</th></tr></thead>
+    <tbody>
+      <tr><td>账户管理</td><td>设置 → 账户；我的 → 账户与分类设置</td><td>我的 → 账户与分类设置 → 账户</td><td>入口重复且移动端多一层</td></tr>
+      <tr><td>分类管理</td><td>设置 → 分类；我的 → 账户与分类设置</td><td>我的 → 账户与分类设置 → 分类</td><td>“设置”是页面还是分组不清晰</td></tr>
+      <tr><td>账号安全</td><td>设置 → 安全；我的 → 安全</td><td>我的 → 安全</td><td>同功能两个主入口</td></tr>
+      <tr><td>家庭管理</td><td>侧栏家庭；我的 → 家庭</td><td>我的 → 家庭</td><td>桌面重复、跨端结构不一致</td></tr>
+      <tr><td>站点管理</td><td>侧栏站点管理；我的 → 站点管理</td><td>我的 → 站点管理</td><td>管理员看到两个入口</td></tr>
+    </tbody>
+  </table>
+
+  <h2>方案比较</h2>
+  <div class="grid g3">
+    <section class="card"><span class="tag">推荐</span><h3 style="margin-top:10px">A. 合并到“我的”</h3><p class="muted">跨端完全一致；用户只需记住一个入口；对子页面改动最小。</p><p class="good">清晰度最高，迁移风险低</p></section>
+    <section class="card"><h3> B. 保留两者并重新命名</h3><p class="muted">“我的”只管身份，“账本设置”管账户与分类。</p><p class="risk">安全、家庭、站点管理仍难明确归属</p></section>
+    <section class="card"><h3>C. 侧栏设置抽屉</h3><p class="muted">不离开当前页即可配置，但手机和桌面需要两套交互。</p><p class="risk">实现成本高，当前功能量不值得</p></section>
+  </div>
+
+  <h2>确认采用的信息结构</h2>
+  <table>
+    <thead><tr><th>“我的”分组</th><th>内容</th><th>展示规则</th></tr></thead>
+    <tbody>
+      <tr><td>账户身份</td><td>显示名称、邮箱、两步验证状态</td><td>所有用户</td></tr>
+      <tr><td>账本设置</td><td>账户管理、分类管理</td><td>所有用户；两个入口直接进入子页面</td></tr>
+      <tr><td>家庭与协作</td><td>家庭管理、邀请与成员</td><td>所有用户</td></tr>
+      <tr><td>安全</td><td>密码、MFA、恢复码、退出全部设备</td><td>所有用户</td></tr>
+      <tr><td>站点管理</td><td>注册开关、邀请码、用户与管理员</td><td>仅管理员和超级管理员</td></tr>
+      <tr><td>会话</td><td>退出登录</td><td>放在页面末尾，避免与设置项混淆</td></tr>
+    </tbody>
+  </table>
+
+  <h2>目标界面示意</h2>
+  <div class="grid g2">
+    <section>
+      <h3>桌面端：保留家庭，其他管理入口归入“我的”</h3>
+      <div class="nav-demo">
+        <div class="side"><div class="logo">ItemLife</div><div class="nav-item">首页</div><div class="nav-item">流水</div><div class="nav-item">记一笔</div><div class="nav-item">物品</div><div class="nav-item">家庭</div><div class="nav-item on">我的</div></div>
+        <div class="hub"><div class="profile"><b>陈泽闻</b><div class="muted">账号状态与 MFA 摘要</div></div><div class="group"><b>账本设置</b><div class="row"><span>账户管理</span><span>›</span></div><div class="row"><span>分类管理</span><span>›</span></div></div><div class="group"><b>账户与协作</b><div class="row"><span>家庭与邀请</span><span>›</span></div><div class="row"><span>账号安全</span><span>›</span></div></div></div>
+      </div>
+    </section>
+    <section>
+      <h3>移动端：沿用现有“我的”Tab</h3>
+      <div class="phone"><div class="phone-head">我的</div><div class="phone-body"><div class="profile"><b>陈泽闻</b><div class="muted">邮箱 · MFA 已开启</div></div><div class="group"><b>账本设置</b><div class="row"><span>账户管理</span><span>›</span></div><div class="row"><span>分类管理</span><span>›</span></div></div><div class="group"><b>家庭与安全</b><div class="row"><span>家庭与邀请</span><span>›</span></div><div class="row"><span>账号安全</span><span>›</span></div></div></div><div class="phone-tabs"><span>首页</span><span>流水</span><span>记一笔</span><span>物品</span><span class="on">我的</span></div></div>
+    </section>
+  </div>
+
+  <h2>路由与实施建议</h2>
+  <div class="grid g2">
+    <section class="card step" data-step="1"><h3>统一导航</h3><p>桌面侧栏保留高频协作入口“家庭”，移除“设置”和“站点管理”；移动底栏保留五个入口及凸起的“记一笔”图标。</p></section>
+    <section class="card step" data-step="2"><h3>重组“我的”</h3><p>将现有入口按账本、协作、安全、管理分组；账户与分类直接进入对应页面，减少一层跳转。</p></section>
+    <section class="card step" data-step="3"><h3>移除旧设置页</h3><p>删除 <code>/settings</code> 页面和路由，账号安全迁移到 <code>/me/security</code>；账户、分类、家庭与站点管理继续使用独立路由，不涉及数据迁移。</p></section>
+    <section class="card step" data-step="4"><h3>补齐返回关系</h3><p>所有管理子页提供“返回我的”或面包屑；浏览器返回键维持原历史，不强制跳首页。</p></section>
+  </div>
+
+  <h2>可用性与验收标准</h2>
+  <ul class="card">
+    <li>桌面保留“家庭”和“我的”，移动端通过“我的”进入家庭与管理功能。</li>
+    <li>每个功能只有一个主要入口，账户、分类、家庭、安全最多两次点击可达。</li>
+    <li>管理员功能按角色显示，不留下无权限空分组。</li>
+    <li>分组使用真实标题和说明，不只依赖图标或颜色表达。</li>
+    <li>列表行触控高度至少 44px，键盘焦点清晰，当前页同时用背景和文字状态表达。</li>
+    <li>旧的 <code>/settings</code> 页面、路由和重复入口已移除。</li>
+  </ul>
+
+  <h2>证据范围</h2>
+  <section class="card muted">
+    <p>本报告检查了 <code>AppShell.vue</code>、<code>MeView.vue</code>、已移除的旧 <code>SettingsView.vue</code> 和路由配置，结论针对现有信息结构与入口关系。当前运行环境没有可操控的登录态浏览器截图工具，因此未将像素级布局、键盘焦点和屏幕阅读器行为表述为已验证结果；这些项目应在本地 Docker 审阅版中通过桌面与手机实机复核。</p>
+  </section>
+</main>
+</body>
+</html>

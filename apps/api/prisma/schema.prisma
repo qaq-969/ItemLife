@@ -1,0 +1,466 @@
+// ItemLife 数据模型（设计报告 5.2 的落地）
+// 约定：金额一律 BIGINT「分」；主键 UUID v7 以 BINARY(16) 存储（由应用层 newId() 生成）；时间 UTC。
+// 注意：修改本文件后执行 `pnpm --filter @itemlife/api prisma:migrate` 生成迁移。
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// 数据归属：个人 / 家庭（多态所有者）
+enum OwnerType {
+  user
+  household
+}
+
+enum TransactionType {
+  income
+  expense
+  transfer_in
+  transfer_out
+}
+
+enum AccountType {
+  cash
+  bank
+  payment
+  investment
+  receivable
+  payable
+}
+
+enum InterestFreq {
+  monthly
+  quarterly
+  yearly
+}
+
+enum CategoryKind {
+  income
+  expense
+}
+
+enum ItemStatus {
+  in_use
+  idle
+  retired
+  lost
+}
+
+enum HouseholdRole {
+  owner
+  admin
+  member
+}
+
+enum SiteRole {
+  super_admin
+  admin
+  user
+}
+
+/// 这笔钱算在物品的哪一部分（设计报告联动调整方案 §5.4）：
+/// body 本体采购 / fee 附加费用（维修、运费）/ accessory 配件采购 / link 仅关联（不进成本）
+enum AllocationRole {
+  body
+  fee
+  accessory
+  link
+}
+
+enum InventoryRevertKind {
+  dispose
+  correction
+  refund
+}
+
+// ---------------------------------------------------------------- 认证与用户
+
+model User {
+  id              Bytes     @id @db.Binary(16)
+  email           String    @unique @db.VarChar(255)
+  passwordHash    String    @map("password_hash") @db.VarChar(255)
+  nickname        String?   @db.VarChar(50)
+  baseCurrency    String    @default("CNY") @map("base_currency") @db.Char(3)
+  mfaEnabled      Boolean   @default(false) @map("mfa_enabled")
+  totpSecretEnc   Bytes?    @map("totp_secret_enc") @db.VarBinary(255)
+  totpConfirmedAt DateTime? @map("totp_confirmed_at")
+  /// 最后成功验证的 TOTP 时间步：同一窗口内的动态码二次提交一律拒绝（防重放，见设计报告 7.3）
+  lastTotpStep    BigInt?   @map("last_totp_step")
+  siteRole        SiteRole  @default(user) @map("site_role")
+  disabledAt      DateTime? @map("disabled_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  refreshTokens     RefreshToken[]
+  recoveryCodes     MfaRecoveryCode[]
+  memberships       HouseholdMember[]
+  ownedHouseholds   Household[]       @relation("HouseholdOwner")
+  createdInvites    HouseholdInvite[] @relation("InviteCreator")
+  createdTransactions Transaction[]   @relation("TransactionCreator")
+  accessoryUsages     AccessoryUsage[]
+  inventoryReverts   InventoryRevert[]
+  createdSiteInvites SiteInvite[]      @relation("SiteInviteCreator")
+  registrationInvite SiteInvite?       @relation("SiteInviteUser")
+
+  @@map("users")
+}
+
+model SiteSettings {
+  id               Int      @id @default(1)
+  registrationOpen Boolean  @default(true) @map("registration_open")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model SiteInvite {
+  id        Bytes     @id @db.Binary(16)
+  codeHash  String    @unique @map("code_hash") @db.Char(64)
+  remark    String?   @db.VarChar(100)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  usedBy    Bytes?    @unique @map("used_by") @db.Binary(16)
+  revokedAt DateTime? @map("revoked_at")
+  createdBy Bytes     @map("created_by") @db.Binary(16)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  creator  User  @relation("SiteInviteCreator", fields: [createdBy], references: [id])
+  usedUser User? @relation("SiteInviteUser", fields: [usedBy], references: [id], onDelete: SetNull)
+
+  @@index([createdBy])
+  @@index([expiresAt])
+  @@map("site_invites")
+}
+
+model RefreshToken {
+  id          Bytes     @id @db.Binary(16)
+  userId      Bytes     @map("user_id") @db.Binary(16)
+  tokenHash   String    @unique @map("token_hash") @db.Char(64)
+  deviceName  String?   @map("device_name") @db.VarChar(100)
+  ip          String?   @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  rotatedFrom Bytes?    @map("rotated_from") @db.Binary(16)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("refresh_tokens")
+}
+
+model MfaRecoveryCode {
+  id        Bytes     @id @db.Binary(16)
+  userId    Bytes     @map("user_id") @db.Binary(16)
+  codeHash  String    @map("code_hash") @db.Char(64)
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("mfa_recovery_codes")
+}
+
+// ---------------------------------------------------------------- 家庭协作
+
+model Household {
+  id          Bytes    @id @db.Binary(16)
+  name        String   @db.VarChar(50)
+  ownerUserId Bytes    @map("owner_user_id") @db.Binary(16)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner   User              @relation("HouseholdOwner", fields: [ownerUserId], references: [id])
+  members HouseholdMember[]
+  invites HouseholdInvite[]
+
+  @@map("households")
+}
+
+model HouseholdMember {
+  id          Bytes         @id @db.Binary(16)
+  householdId Bytes         @map("household_id") @db.Binary(16)
+  userId      Bytes         @map("user_id") @db.Binary(16)
+  role        HouseholdRole @default(member)
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, userId])
+  @@index([userId])
+  @@map("household_members")
+}
+
+model HouseholdInvite {
+  id            Bytes     @id @db.Binary(16)
+  householdId   Bytes     @map("household_id") @db.Binary(16)
+  codeHash      String    @unique @map("code_hash") @db.Char(64)
+  expiresAt     DateTime  @map("expires_at")
+  maxUses       Int       @default(5) @map("max_uses")
+  usedCount     Int       @default(0) @map("used_count")
+  createdBy     Bytes     @map("created_by") @db.Binary(16)
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  creator   User      @relation("InviteCreator", fields: [createdBy], references: [id])
+
+  @@index([householdId])
+  @@map("household_invites")
+}
+
+// ---------------------------------------------------------------- 记账：账户 / 分类 / 流水
+
+model Account {
+  id                  Bytes         @id @db.Binary(16)
+  ownerType           OwnerType     @map("owner_type")
+  ownerId             Bytes         @map("owner_id") @db.Binary(16)
+  name                String        @db.VarChar(50)
+  type                AccountType
+  currency            String        @default("CNY") @db.Char(3)
+  initialBalanceMinor BigInt        @default(0) @map("initial_balance_minor")
+  /// 年化利率（基点，1bp = 0.01%）；NULL = 不计息（见设计报告 8.5）
+  interestRateBp      Int?          @map("interest_rate_bp")
+  interestFreq        InterestFreq? @map("interest_freq")
+  /// 上次结息日：同时作为自动结息的幂等标记
+  interestPostedAt    DateTime?     @map("interest_posted_at") @db.Date
+  sortOrder           Int           @default(0) @map("sort_order")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  deletedAt           DateTime?     @map("deleted_at")
+
+  transactions Transaction[]
+
+  @@index([ownerType, ownerId, sortOrder])
+  @@map("accounts")
+}
+
+model Category {
+  id         Bytes        @id @db.Binary(16)
+  ownerType  OwnerType    @map("owner_type")
+  ownerId    Bytes        @map("owner_id") @db.Binary(16)
+  kind       CategoryKind
+  name       String       @db.VarChar(30)
+  icon       String?      @db.VarChar(50)
+  color      String?      @db.Char(7)
+  parentId   Bytes?       @map("parent_id") @db.Binary(16)
+  sortOrder  Int          @default(0) @map("sort_order")
+  /// 系统标签：investment_return（投资收益）/ interest（自动结息），驱动看板口径
+  systemTag  String?      @map("system_tag") @db.VarChar(30)
+  isSystem   Boolean      @default(false) @map("is_system")
+  /// 停用时间：分类已有流水时不允许删除，只能停用（不再出现在记账选择器中）
+  archivedAt DateTime?    @map("archived_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  deletedAt  DateTime?    @map("deleted_at")
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  transactions Transaction[]
+
+  @@index([ownerType, ownerId, kind, sortOrder])
+  @@map("categories")
+}
+
+model Transaction {
+  id              Bytes           @id @db.Binary(16)
+  ownerType       OwnerType       @map("owner_type")
+  ownerId         Bytes           @map("owner_id") @db.Binary(16)
+  type            TransactionType
+  /// 金额（分）；支出 / 转出为负向语义由 type 表达，此处始终存正数
+  amountMinor     BigInt          @map("amount_minor")
+  currency        String          @default("CNY") @db.Char(3)
+  accountId       Bytes           @map("account_id") @db.Binary(16)
+  categoryId      Bytes?          @map("category_id") @db.Binary(16)
+  occurredAt      DateTime        @map("occurred_at")
+  note            String?         @db.VarChar(200)
+  systemTag       String?         @map("system_tag") @db.VarChar(30)
+  /// 转账成对写入时共享同一 group id
+  transferGroupId Bytes?          @map("transfer_group_id") @db.Binary(16)
+  createdBy       Bytes           @map("created_by") @db.Binary(16)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  deletedAt       DateTime?       @map("deleted_at")
+
+  account   Account           @relation(fields: [accountId], references: [id])
+  category  Category?         @relation(fields: [categoryId], references: [id])
+  creator   User              @relation("TransactionCreator", fields: [createdBy], references: [id])
+  // 物品关联统一走分摊表（一笔流水可关联 1～N 个物品）
+  itemLinks TransactionItem[]
+  // 通过流水登记入库的配件批次
+  accessoryBatches ItemAccessory[]
+  // 以本笔流水作为「本体采购流水」的物品
+  purchasedItems Item[] @relation("ItemPurchaseTransaction")
+  inventoryRevertSources InventoryRevert[] @relation("InventoryRevertSource")
+  inventoryRevertCash    InventoryRevert[] @relation("InventoryRevertCash")
+
+  @@index([ownerType, ownerId, occurredAt])
+  @@index([accountId, type, amountMinor])
+  @@index([categoryId, occurredAt])
+  @@index([transferGroupId])
+  @@map("transactions")
+}
+
+/// 流水-物品分摊：amount_minor 为 NULL 表示继承整笔流水金额（仅单物品场景允许）
+model TransactionItem {
+  id            Bytes          @id @db.Binary(16)
+  transactionId Bytes          @map("transaction_id") @db.Binary(16)
+  itemId        Bytes          @map("item_id") @db.Binary(16)
+  parentId      Bytes?         @map("parent_id") @db.Binary(16)
+  /// 行名称快照：附加费用必须保存；物品与配件展示时优先读取实时实体名称
+  name          String?        @db.VarChar(100)
+  amountMinor   BigInt?        @map("amount_minor")
+  /// 这笔钱算在本体 / 附加费用 / 配件 / 仅关联；默认 link，保证历史数据不进成本口径
+  role          AllocationRole @default(link)
+  /// 配件采购时指向具体批次；为 NULL 表示该分摊与批次无关
+  accessoryId   Bytes?         @map("accessory_id") @db.Binary(16)
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  transaction Transaction    @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  item        Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  accessory   ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  parent      TransactionItem?  @relation("TransactionItemTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    TransactionItem[] @relation("TransactionItemTree")
+
+  @@unique([transactionId, itemId, role, accessoryId])
+  @@index([itemId, createdAt])
+  @@index([accessoryId])
+  @@index([parentId])
+  @@map("transaction_items")
+}
+
+// ---------------------------------------------------------------- 物品与配件
+
+model Item {
+  id                   Bytes      @id @db.Binary(16)
+  ownerType            OwnerType  @map("owner_type")
+  ownerId              Bytes      @map("owner_id") @db.Binary(16)
+  name                 String     @db.VarChar(100)
+  categoryId           Bytes?     @map("category_id") @db.Binary(16)
+  parentItemId         Bytes?     @map("parent_item_id") @db.Binary(16)
+  purchaseDate         DateTime   @map("purchase_date") @db.Date
+  /// 回退价（分）：仅当物品没有任何 body/fee 分摊时参与成本计算（见联动调整方案 §5.2）
+  purchasePriceMinor   BigInt     @map("purchase_price_minor")
+  /// 首次本体采购流水的快捷指针（详情页跳转用）；金额一律以 transaction_items 求和为准
+  purchaseTransactionId Bytes?   @map("purchase_transaction_id") @db.Binary(16)
+  currency             String     @default("CNY") @db.Char(3)
+  expectedLifespanDays Int?       @map("expected_lifespan_days")
+  status               ItemStatus @default(in_use)
+  note                 String?    @db.VarChar(200)
+  createdAt            DateTime   @default(now()) @map("created_at")
+  updatedAt            DateTime   @updatedAt @map("updated_at")
+  deletedAt            DateTime?  @map("deleted_at")
+
+  accessories     ItemAccessory[]
+  accessoryUsages AccessoryUsage[]
+  inventoryReverts InventoryRevert[]
+  transactionLinks TransactionItem[]
+  parentItem       Item?           @relation("ItemTree", fields: [parentItemId], references: [id], onDelete: Restrict)
+  childItems       Item[]          @relation("ItemTree")
+  purchaseTransaction Transaction? @relation("ItemPurchaseTransaction", fields: [purchaseTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([ownerType, ownerId, status])
+  @@index([categoryId])
+  @@index([parentItemId])
+  @@map("items")
+}
+
+model ItemAccessory {
+  id             Bytes    @id @db.Binary(16)
+  itemId         Bytes    @map("item_id") @db.Binary(16)
+  name           String   @db.VarChar(60)
+  unitPriceMinor BigInt   @map("unit_price_minor")
+  /// 批次总额除以数量的余数，全部计入第一件配件，确保金额精确守恒
+  firstUnitExtraMinor BigInt @default(0) @map("first_unit_extra_minor")
+  totalQty       Int      @map("total_qty")
+  usedQty        Int      @default(0) @map("used_qty")
+  revertedQty    Int      @default(0) @map("reverted_qty")
+  /// 配件购入日期：同一物品可分批入库，成本按批次单价计算
+  purchasedAt    DateTime @map("purchased_at") @db.Date
+  /// 首次入库的购买流水（快捷指针，从流水侧反查请用 TransactionItem.accessoryId）
+  transactionId  Bytes?   @map("transaction_id") @db.Binary(16)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  item             Item            @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  transaction      Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  transactionLinks TransactionItem[]
+  usages           AccessoryUsage[]
+  reverts          InventoryRevert[]
+
+  @@index([itemId])
+  @@index([itemId, deletedAt])
+  @@map("item_accessories")
+}
+
+model InventoryRevert {
+  id                  Bytes               @id @db.Binary(16)
+  itemId              Bytes               @map("item_id") @db.Binary(16)
+  accessoryId         Bytes?              @map("accessory_id") @db.Binary(16)
+  sourceTransactionId Bytes?              @map("source_transaction_id") @db.Binary(16)
+  cashTransactionId   Bytes?              @map("cash_transaction_id") @db.Binary(16)
+  kind                InventoryRevertKind
+  qty                 Int?
+  reason              String               @db.VarChar(200)
+  createdBy           Bytes                @map("created_by") @db.Binary(16)
+  createdAt           DateTime             @default(now()) @map("created_at")
+
+  item              Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  accessory         ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
+  sourceTransaction Transaction?   @relation("InventoryRevertSource", fields: [sourceTransactionId], references: [id], onDelete: SetNull)
+  cashTransaction   Transaction?   @relation("InventoryRevertCash", fields: [cashTransactionId], references: [id], onDelete: SetNull)
+  actor             User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+
+  @@index([itemId, createdAt])
+  @@index([accessoryId, createdAt])
+  @@map("inventory_reverts")
+}
+
+/// 配件使用审计：每次「使用一个 / 撤销一个」写入一行，可追溯谁在什么时候用掉了一枚（设计报告 5.2 ⑩）。
+/// 成本演进折线的台阶也由本表时间线还原——比只存 used_qty 多一份可回溯的凭据。
+model AccessoryUsage {
+  id           Bytes    @id @db.Binary(16)
+  accessoryId  Bytes    @map("accessory_id") @db.Binary(16)
+  itemId       Bytes    @map("item_id") @db.Binary(16)
+  /// 正数为消耗、负数为撤销
+  deltaQty     Int      @map("delta_qty")
+  /// 本次变更后的已用数量，便于按时间线还原持有成本
+  usedQtyAfter Int      @map("used_qty_after")
+  actorUserId  Bytes?   @map("actor_user_id") @db.Binary(16)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  accessory ItemAccessory @relation(fields: [accessoryId], references: [id], onDelete: Cascade)
+  item      Item          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  actor     User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([accessoryId, createdAt])
+  @@index([itemId, createdAt])
+  @@map("accessory_usages")
+}
+
+// ---------------------------------------------------------------- 货币扩展预留
+
+/// v1.0 仅 CNY（CurrencyService 恒等转换）；本表为多币种启用时提供汇率来源
+model ExchangeRate {
+  id            Bytes    @id @db.Binary(16)
+  fromCurrency  String   @map("from_currency") @db.Char(3)
+  toCurrency    String   @map("to_currency") @db.Char(3)
+  rate          Decimal  @db.Decimal(18, 8)
+  effectiveDate DateTime @map("effective_date") @db.Date
+  source        String?  @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([fromCurrency, toCurrency, effectiveDate])
+  @@map("exchange_rates")
+}
