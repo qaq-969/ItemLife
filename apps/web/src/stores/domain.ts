@@ -10,6 +10,9 @@ export const useDomainStore = defineStore('domain', () => {
   const active = ref(typeof localStorage === 'undefined' ? 'user' : (localStorage.getItem(STORAGE_KEY) ?? 'user'));
   const households = ref<HouseholdDto[]>([]);
   const loading = ref(false);
+  const loaded = ref(false);
+  let inFlight: Promise<void> | null = null;
+  let requestGeneration = 0;
 
   const activeHousehold = computed(() => {
     const id = active.value.startsWith('household:') ? active.value.slice('household:'.length) : '';
@@ -26,13 +29,27 @@ export const useDomainStore = defineStore('domain', () => {
   const label = computed(() => activeHousehold.value?.name ?? '个人账本');
 
   async function load(): Promise<void> {
+    const generation = ++requestGeneration;
     loading.value = true;
     try {
-      households.value = await familyApi.list();
-      if (active.value !== 'user' && !activeHousehold.value) setActive('user');
+      const rows = await familyApi.list();
+      if (requestGeneration === generation) {
+        households.value = rows;
+        if (active.value !== 'user' && !activeHousehold.value) setActive('user');
+        loaded.value = true;
+      }
     } finally {
-      loading.value = false;
+      if (requestGeneration === generation) loading.value = false;
     }
+  }
+
+  function ensureLoaded(): Promise<void> {
+    if (loaded.value) return Promise.resolve();
+    if (!inFlight) {
+      const promise = load().finally(() => { if (inFlight === promise) inFlight = null; });
+      inFlight = promise;
+    }
+    return inFlight;
   }
 
   function setActive(value: string): void {
@@ -42,8 +59,11 @@ export const useDomainStore = defineStore('domain', () => {
 
   function reset(): void {
     households.value = [];
+    loaded.value = false;
+    inFlight = null;
+    requestGeneration += 1;
     setActive('user');
   }
 
-  return { active, households, activeHousehold, query, owner, options, label, loading, load, setActive, reset };
+  return { active, households, activeHousehold, query, owner, options, label, loading, loaded, load, ensureLoaded, setActive, reset };
 });

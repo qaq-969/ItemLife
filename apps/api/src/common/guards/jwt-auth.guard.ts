@@ -38,10 +38,17 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     const userId = toIdBytes(payload.sub);
-    const user = userId
-      ? await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null, disabledAt: null }, select: { id: true } })
-      : null;
-    if (!user) {
+    const sessionId = toIdBytes(payload.sid);
+    const [user, session] = userId && sessionId
+      ? await Promise.all([
+          this.prisma.user.findFirst({ where: { id: userId, deletedAt: null, disabledAt: null }, select: { id: true } }),
+          this.prisma.refreshToken.findFirst({
+            where: { id: sessionId, userId, revokedAt: null, expiresAt: { gt: new Date() } },
+            select: { id: true },
+          }),
+        ])
+      : [null, null];
+    if (!user || !session) {
       throw new UnauthorizedException({ code: 'UNAUTHORIZED', message: '登录状态已失效，请重新登录' });
     }
 

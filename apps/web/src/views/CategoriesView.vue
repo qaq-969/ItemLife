@@ -160,7 +160,7 @@ async function toggleIncludeArchived(): Promise<void> {
 }
 
 onMounted(() => {
-  void ledger.refresh().catch(() => undefined);
+  void ledger.ensureLoaded().catch(() => undefined);
 });
 </script>
 

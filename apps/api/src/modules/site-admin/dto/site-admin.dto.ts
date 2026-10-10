@@ -26,3 +26,10 @@ export class UpdateSiteUserStatusDto {
   @IsBoolean()
   enabled!: boolean;
 }
+
+export class ResetSiteUserPasswordDto {
+  @ApiProperty({ minLength: 10, maxLength: 128 })
+  @IsString()
+  @MaxLength(128)
+  password!: string;
+}

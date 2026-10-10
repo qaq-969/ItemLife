@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import type { SiteAdminOverviewDto, SiteInviteDto, SiteUserDto } from '@itemlife/shared';
+import { checkPasswordStrength, type SiteAdminOverviewDto, type SiteInviteDto, type SiteUserDto } from '@itemlife/shared';
 import AppModal from '@/components/AppModal.vue';
 import { siteAdminApi } from '@/api/site-admin';
 import { toApiError } from '@/api/http';
@@ -13,9 +13,18 @@ const errorMessage = ref('');
 const newInviteCode = ref('');
 const inviteRemark = ref('');
 const copyNotice = ref('');
+const successMessage = ref('');
 const pending = ref<null | { title: string; body: string; run: () => Promise<void> }>(null);
+const passwordTarget = ref<SiteUserDto | null>(null);
+const newPassword = ref('');
+const confirmPassword = ref('');
+const deleteTarget = ref<SiteUserDto | null>(null);
+const deleteConfirmation = ref('');
 
 const isSuper = computed(() => auth.user?.siteRole === 'super_admin');
+const passwordStrength = computed(() => checkPasswordStrength(newPassword.value));
+const passwordReady = computed(() => passwordStrength.value.ok && newPassword.value === confirmPassword.value);
+const deleteReady = computed(() => deleteTarget.value !== null && deleteConfirmation.value.trim() === deleteTarget.value.email);
 
 async function load(): Promise<void> {
   errorMessage.value = '';
@@ -72,12 +81,50 @@ function confirmRole(user: SiteUserDto): void {
 function confirmStatus(user: SiteUserDto): void {
   const enabling = Boolean(user.disabledAt);
   pending.value = {
-    title: enabling ? '恢复用户' : '移除用户',
+    title: enabling ? '恢复用户' : '停用用户',
     body: enabling
       ? `恢复后 ${user.email} 可以重新登录，原有数据保持不变。`
       : `将停用 ${user.email} 并立即撤销其全部登录会话；账本数据会保留，可稍后恢复。`,
     run: async () => { await siteAdminApi.updateStatus(user.id, enabling); await load(); },
   };
+}
+
+function openPasswordReset(user: SiteUserDto): void {
+  passwordTarget.value = user;
+  newPassword.value = '';
+  confirmPassword.value = '';
+  successMessage.value = '';
+}
+
+async function resetPassword(): Promise<void> {
+  if (!passwordTarget.value || !passwordReady.value || busy.value) return;
+  busy.value = true;
+  errorMessage.value = '';
+  try {
+    await siteAdminApi.resetPassword(passwordTarget.value.id, newPassword.value);
+    successMessage.value = `已重置 ${passwordTarget.value.email} 的密码，并撤销其全部登录会话。`;
+    passwordTarget.value = null;
+  } catch (error) { errorMessage.value = toApiError(error).message; }
+  finally { busy.value = false; }
+}
+
+function openDelete(user: SiteUserDto): void {
+  deleteTarget.value = user;
+  deleteConfirmation.value = '';
+  successMessage.value = '';
+}
+
+async function deleteUser(): Promise<void> {
+  if (!deleteTarget.value || !deleteReady.value || busy.value) return;
+  busy.value = true;
+  errorMessage.value = '';
+  try {
+    await siteAdminApi.deleteUser(deleteTarget.value.id);
+    successMessage.value = `已永久删除 ${deleteTarget.value.email}。`;
+    deleteTarget.value = null;
+    await load();
+  } catch (error) { errorMessage.value = toApiError(error).message; }
+  finally { busy.value = false; }
 }
 
 async function runPending(): Promise<void> {
@@ -148,6 +195,7 @@ onMounted(() => { void load(); });
     </header>
 
     <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+    <p v-if="successMessage" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-700">{{ successMessage }}</p>
 
     <section v-if="data && !data.registrationOpen" class="card p-5">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -183,7 +231,7 @@ onMounted(() => { void load(); });
     <section v-if="data" class="card overflow-hidden">
       <div class="border-b border-line px-5 py-4">
         <h2 class="font-semibold">用户（{{ data.users.length }}）</h2>
-        <p class="mt-1 text-xs text-ink-3">移除用户会停用账号并保留其账本数据</p>
+        <p class="mt-1 text-xs text-ink-3">用户停用后才可永久删除；停用可恢复并保留数据</p>
       </div>
       <div class="divide-y divide-line">
         <article v-for="user in data.users" :key="user.id" class="flex flex-wrap items-center gap-3 px-5 py-4">
@@ -197,14 +245,16 @@ onMounted(() => { void load(); });
           <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="user.siteRole === 'super_admin' ? 'bg-brand-soft text-brand' : 'bg-slate-100 text-ink-2'">
             {{ user.siteRole === 'super_admin' ? '超级管理员' : user.siteRole === 'admin' ? '管理员' : '普通用户' }}
           </span>
-          <span v-if="user.disabledAt" class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-danger">已移除</span>
-          <div v-if="user.id !== auth.user?.id && user.siteRole !== 'super_admin'" class="flex gap-2">
+          <span v-if="user.disabledAt" class="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-danger">已停用</span>
+          <div v-if="user.id !== auth.user?.id && user.siteRole !== 'super_admin'" class="flex flex-wrap gap-2">
             <button v-if="isSuper" type="button" class="btn btn-ghost" :disabled="busy || Boolean(user.disabledAt)" @click="confirmRole(user)">
               {{ user.siteRole === 'admin' ? '移除管理权限' : '设为管理员' }}
             </button>
             <button v-if="user.siteRole === 'user'" type="button" class="btn btn-ghost" :class="user.disabledAt ? 'text-ok' : 'text-danger'" :disabled="busy" @click="confirmStatus(user)">
-              {{ user.disabledAt ? '恢复' : '移除' }}
+              {{ user.disabledAt ? '恢复' : '停用' }}
             </button>
+            <button v-if="isSuper" type="button" class="btn btn-ghost" :disabled="busy" @click="openPasswordReset(user)">重置密码</button>
+            <button v-if="isSuper && user.disabledAt" type="button" class="btn btn-ghost text-danger" :disabled="busy" @click="openDelete(user)">永久删除</button>
           </div>
         </article>
       </div>
@@ -217,6 +267,30 @@ onMounted(() => { void load(); });
       <div class="mt-5 grid grid-cols-2 gap-2">
         <button type="button" class="btn btn-ghost" :disabled="busy" @click="pending = null">取消</button>
         <button type="button" class="btn btn-primary" :disabled="busy" @click="runPending">确认</button>
+      </div>
+    </AppModal>
+
+    <AppModal :open="passwordTarget !== null" title="重置用户密码" @close="passwordTarget = null">
+      <p class="text-sm leading-6 text-ink-2">为 {{ passwordTarget?.email }} 设置新密码。保存后该用户所有设备会立即退出登录。</p>
+      <label class="label mt-4 block" for="admin-reset-password">新密码</label>
+      <input id="admin-reset-password" v-model="newPassword" class="field mt-1 w-full" type="password" maxlength="128" autocomplete="new-password" />
+      <p v-if="newPassword && !passwordStrength.ok" class="mt-1 text-xs text-ink-3">{{ passwordStrength.issues.join('；') }}</p>
+      <label class="label mt-3 block" for="admin-reset-password-confirm">确认新密码</label>
+      <input id="admin-reset-password-confirm" v-model="confirmPassword" class="field mt-1 w-full" type="password" maxlength="128" autocomplete="new-password" @keyup.enter="resetPassword" />
+      <p v-if="confirmPassword && newPassword !== confirmPassword" class="mt-1 text-xs text-danger">两次输入的密码不一致</p>
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button type="button" class="btn btn-ghost" :disabled="busy" @click="passwordTarget = null">取消</button>
+        <button type="button" class="btn btn-primary" :disabled="busy || !passwordReady" @click="resetPassword">确认重置</button>
+      </div>
+    </AppModal>
+
+    <AppModal :open="deleteTarget !== null" title="永久删除用户" @close="deleteTarget = null">
+      <p class="text-sm leading-6 text-ink-2">该账户已经停用。继续操作将永久删除账号、个人账本、物品，以及该用户创建的全部家庭账本；其在其他家庭创建的共享记录会保留，但不再显示创建者。此操作不可恢复。</p>
+      <label class="label mt-4 block" for="delete-site-user-confirm">输入“{{ deleteTarget?.email }}”确认</label>
+      <input id="delete-site-user-confirm" v-model="deleteConfirmation" class="field mt-1 w-full" autocomplete="off" />
+      <div class="mt-5 grid grid-cols-2 gap-2">
+        <button type="button" class="btn btn-ghost" :disabled="busy" @click="deleteTarget = null">取消</button>
+        <button type="button" class="btn bg-danger text-white" :disabled="busy || !deleteReady" @click="deleteUser">永久删除</button>
       </div>
     </AppModal>
   </section>

@@ -37,7 +37,7 @@ async function bootstrap(): Promise<void> {
 
   // 先恢复会话再挂载，避免首屏出现登录页闪烁
   await auth.bootstrap();
-  if (auth.isAuthenticated) await useDomainStore(pinia).load().catch(() => undefined);
+  if (auth.isAuthenticated) await useDomainStore(pinia).ensureLoaded().catch(() => undefined);
 
   app.use(router);
   await router.isReady();

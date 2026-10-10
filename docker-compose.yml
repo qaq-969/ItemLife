@@ -15,13 +15,14 @@ services:
       LOG_PORT: '15140'
       LOG_MAX_BYTES: '20971520'
       LOG_RETENTION_DAYS: '30'
+      LOG_FLUSH_INTERVAL_MS: '43200000'
       TZ: Asia/Shanghai
     ports:
       - '127.0.0.1:15140:15140/udp'
     volumes:
       - logs:/logs
     networks:
-      - backend
+      - frontend
     restart: unless-stopped
     logging:
       driver: json-file
@@ -41,6 +42,8 @@ services:
       - frontend
       - backend
     depends_on:
+      log-collector:
+        condition: service_started
       api:
         condition: service_healthy
     healthcheck:
@@ -77,6 +80,8 @@ services:
     networks:
       - backend
     depends_on:
+      log-collector:
+        condition: service_started
       mysql:
         condition: service_healthy
       redis:
@@ -110,6 +115,9 @@ services:
       - mysql_data:/var/lib/mysql
     networks:
       - backend
+    depends_on:
+      log-collector:
+        condition: service_started
     healthcheck:
       test: ['CMD-SHELL', 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
       interval: 10s
@@ -133,6 +141,9 @@ services:
       - redis_data:/data
     networks:
       - backend
+    depends_on:
+      log-collector:
+        condition: service_started
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
       interval: 10s
@@ -151,10 +162,10 @@ volumes:
   mysql_data:
   redis_data:
   uploads: # 物品图片等用户上传文件
-  logs: # 容器日志：跨容器重建保留，20 MB 分片，保留 30 天
+  logs: # 容器日志：每 12 小时或累计 20 MB 落盘，跨容器重建保留 30 天
 
 networks:
-  frontend: # 仅 web：发布 HTTP 端口，承接外部反向代理回源
+  frontend: # web 与日志采集器：允许向宿主机发布端口
     driver: bridge
   backend: # web / api / mysql / redis：内部互通，不直连外网
     driver: bridge

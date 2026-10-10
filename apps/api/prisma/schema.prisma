@@ -128,10 +128,10 @@ model SiteInvite {
   usedAt    DateTime? @map("used_at")
   usedBy    Bytes?    @unique @map("used_by") @db.Binary(16)
   revokedAt DateTime? @map("revoked_at")
-  createdBy Bytes     @map("created_by") @db.Binary(16)
+  createdBy Bytes?    @map("created_by") @db.Binary(16)
   createdAt DateTime  @default(now()) @map("created_at")
 
-  creator  User  @relation("SiteInviteCreator", fields: [createdBy], references: [id])
+  creator  User? @relation("SiteInviteCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   usedUser User? @relation("SiteInviteUser", fields: [usedBy], references: [id], onDelete: SetNull)
 
   @@index([createdBy])
@@ -287,14 +287,14 @@ model Transaction {
   systemTag       String?         @map("system_tag") @db.VarChar(30)
   /// 转账成对写入时共享同一 group id
   transferGroupId Bytes?          @map("transfer_group_id") @db.Binary(16)
-  createdBy       Bytes           @map("created_by") @db.Binary(16)
+  createdBy       Bytes?          @map("created_by") @db.Binary(16)
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
   deletedAt       DateTime?       @map("deleted_at")
 
   account   Account           @relation(fields: [accountId], references: [id])
   category  Category?         @relation(fields: [categoryId], references: [id])
-  creator   User              @relation("TransactionCreator", fields: [createdBy], references: [id])
+  creator   User?             @relation("TransactionCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   // 物品关联统一走分摊表（一笔流水可关联 1～N 个物品）
   itemLinks TransactionItem[]
   // 通过流水登记入库的配件批次
@@ -413,14 +413,14 @@ model InventoryRevert {
   kind                InventoryRevertKind
   qty                 Int?
   reason              String               @db.VarChar(200)
-  createdBy           Bytes                @map("created_by") @db.Binary(16)
+  createdBy           Bytes?               @map("created_by") @db.Binary(16)
   createdAt           DateTime             @default(now()) @map("created_at")
 
   item              Item           @relation(fields: [itemId], references: [id], onDelete: Restrict)
   accessory         ItemAccessory? @relation(fields: [accessoryId], references: [id], onDelete: Restrict)
   sourceTransaction Transaction?   @relation("InventoryRevertSource", fields: [sourceTransactionId], references: [id], onDelete: SetNull)
   cashTransaction   Transaction?   @relation("InventoryRevertCash", fields: [cashTransactionId], references: [id], onDelete: SetNull)
-  actor             User           @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  actor             User?          @relation(fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([itemId, createdAt])
   @@index([accessoryId, createdAt])

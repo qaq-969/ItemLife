@@ -224,7 +224,7 @@ export class TransactionsService {
           // parent_id 使用 RESTRICT：先在同一事务内解开旧树，才能安全重建任意层级。
           await tx.transactionItem.updateMany({ where: { transactionId: row.id }, data: { parentId: null } });
           await tx.transactionItem.deleteMany({ where: { transactionId: row.id } });
-          await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt), row.createdBy);
+          await this.settleAccessoryBatches(tx, row.id, allocations, startOfDayUtc(occurredAt ?? row.occurredAt), this.requireId(userId));
           await this.writeAllocations(tx, row.id, allocations);
           await this.pinPurchaseTransactions(tx, row.id, allocations);
         }

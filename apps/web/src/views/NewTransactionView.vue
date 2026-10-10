@@ -82,7 +82,7 @@ async function submit(): Promise<void> {
 }
 
 watch([form, rows], () => { pendingKey.value = null; }, { deep: true });
-onMounted(async () => { await ledger.refresh().catch(() => undefined); form.accountId = ledger.accounts[0]?.id ?? ''; itemOptions.value = (await itemsApi.list({ limit: 100, domain: domain.query }).catch(() => ({ items: [] }))).items; if (route.query.addItem === '1') rootMenuOpen.value = true; });
+onMounted(async () => { await ledger.ensureLoaded().catch(() => undefined); form.accountId = ledger.accounts[0]?.id ?? ''; itemOptions.value = (await itemsApi.list({ limit: 100, domain: domain.query }).catch(() => ({ items: [] }))).items; if (route.query.addItem === '1') rootMenuOpen.value = true; });
 </script>
 
 <template>

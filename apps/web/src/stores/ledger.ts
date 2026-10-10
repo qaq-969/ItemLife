@@ -47,6 +47,7 @@ export const useLedgerStore = defineStore('ledger', () => {
 
   /** 首次进入或数据变更后调用；并发调用共用同一次请求。 */
   let inFlight: { key: string; promise: Promise<void> } | null = null;
+  let loadedKey: string | null = null;
   let requestGeneration = 0;
 
   async function refresh(): Promise<void> {
@@ -62,22 +63,29 @@ export const useLedgerStore = defineStore('ledger', () => {
           categoriesApi.list({ domain: domain.query }),
           accountsApi.summary({ domain: domain.query }),
         ]);
-        if (domain.active === key) {
+        if (requestGeneration === generation && domain.active === key) {
           accounts.value = accountRows;
           categories.value = categoryRows;
           summary.value = accountSummary;
           loaded.value = true;
+          loadedKey = key;
         }
       } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : '数据加载失败';
+        if (requestGeneration === generation) error.value = cause instanceof Error ? cause.message : '数据加载失败';
         throw cause;
       } finally {
-        loading.value = false;
-        if (requestGeneration === generation) inFlight = null;
+        if (requestGeneration === generation) {
+          loading.value = false;
+          inFlight = null;
+        }
       }
     })();
     inFlight = { key, promise };
     return promise;
+  }
+
+  function ensureLoaded(): Promise<void> {
+    return loaded.value && loadedKey === domain.active ? Promise.resolve() : refresh();
   }
 
   function reset(): void {
@@ -85,6 +93,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     categories.value = [];
     summary.value = null;
     loaded.value = false;
+    loadedKey = null;
     error.value = null;
     requestGeneration += 1;
     inFlight = null;
@@ -105,6 +114,7 @@ export const useLedgerStore = defineStore('ledger', () => {
     loadCategories,
     loadSummary,
     refresh,
+    ensureLoaded,
     reset,
   };
 });

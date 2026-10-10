@@ -4,7 +4,7 @@ import type { SiteAdminOverviewDto, SiteInviteDto, SiteStatusDto, SiteUserDto } 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import type { AuthenticatedUser } from '../../common/types/auth-user';
-import { CreateSiteInviteDto, UpdateRegistrationDto, UpdateSiteRoleDto, UpdateSiteUserStatusDto } from './dto/site-admin.dto';
+import { CreateSiteInviteDto, ResetSiteUserPasswordDto, UpdateRegistrationDto, UpdateSiteRoleDto, UpdateSiteUserStatusDto } from './dto/site-admin.dto';
 import { SiteAdminService } from './site-admin.service';
 
 @ApiTags('站点管理')
@@ -60,5 +60,21 @@ export class SiteAdminController {
   @ApiOperation({ summary: '管理员停用或恢复普通用户' })
   updateStatus(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSiteUserStatusDto): Promise<SiteUserDto> {
     return this.site.updateStatus(user.id, id, dto.enabled);
+  }
+
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @Patch('admin/users/:id/password')
+  @ApiOperation({ summary: '超级管理员重置其他用户密码并撤销其全部会话' })
+  resetPassword(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ResetSiteUserPasswordDto): Promise<null> {
+    return this.site.resetPassword(user.id, id, dto.password);
+  }
+
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @Delete('admin/users/:id')
+  @ApiOperation({ summary: '超级管理员永久删除已停用用户及其个人和自有家庭数据' })
+  deleteUser(@CurrentUser() user: AuthenticatedUser, @Param('id', ParseUUIDPipe) id: string): Promise<null> {
+    return this.site.deleteUser(user.id, id);
   }
 }

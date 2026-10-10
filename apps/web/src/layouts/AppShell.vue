@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useDomainStore } from '@/stores/domain';
 import { useLedgerStore } from '@/stores/ledger';
 import AppSelect from '@/components/AppSelect.vue';
+import { scheduleAppPreload } from '@/utils/app-preload';
 
 /** 线性图标（stroke）路径表，避免引入图标库 */
 const ICON_PATHS = {
@@ -62,7 +63,11 @@ function isActive(name: string): boolean {
 }
 
 watch(() => domain.active, () => ledger.reset());
-onMounted(() => { void domain.load().catch(() => undefined); });
+onMounted(() => {
+  void domain.ensureLoaded().catch(() => undefined).finally(() => {
+    scheduleAppPreload(() => auth.isAuthenticated ? ledger.ensureLoaded() : Promise.resolve());
+  });
+});
 </script>
 
 <template>
